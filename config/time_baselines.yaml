@@ -1,0 +1,19 @@
+# Minutes the user would have spent doing each task by hand. Used for the "Time saved" KPI.
+# These are estimates. Re-time yourself once per semester and update them; record changes in docs/adr.
+
+tasks:
+  morning_check:      15.0   # opening Canvas, calendars, email to see what's on today
+  deadline_lookup:     2.0   # finding what is due / when
+  conflict_check:      3.0   # comparing calendars for overlaps
+  agenda_lookup:       1.5   # checking what is on a given day
+  routine_lookup:      1.0
+  search_lookup:       2.0   # finding an announcement / item
+  alert_useful:        5.0   # value of a proactive alert the user marked useful (e.g. caught a deadline)
+
+# Mapping from the tool(s) an interaction used to the task it saved.
+tool_to_task:
+  get_agenda: agenda_lookup
+  get_deadlines: deadline_lookup
+  find_conflicts: conflict_check
+  get_routine: routine_lookup
+  search_items: search_lookup

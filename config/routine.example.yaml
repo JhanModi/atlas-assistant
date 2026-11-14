@@ -1,0 +1,39 @@
+# Copy to config/routine.yaml (gitignored) and fill in your real schedule once per semester.
+# Times are local (settings.timezone). Days: mon tue wed thu fri sat sun.
+semester:
+  name: "Fall 2026"
+  start: 2026-09-03
+  end: 2026-12-12
+  skip_dates: [2026-11-25, 2026-11-26, 2026-11-27]   # holidays / no classes
+
+recurring:
+  - title: "CS 5800 Algorithms - Lecture"
+    kind: lecture
+    course: "CS 5800"
+    days: [tue, fri]
+    start: "11:45"
+    end: "13:25"
+    location: "Example Hall 101"
+
+  - title: "CS 5200 DBMS - Lecture"
+    kind: lecture
+    course: "CS 5200"
+    days: [mon, wed]
+    start: "14:50"
+    end: "16:30"
+    location: "Example Hall 210"
+
+  - title: "TA office hours (CS 5800)"
+    kind: office_hours
+    course: "CS 5800"
+    days: [thu]
+    start: "16:00"
+    end: "17:00"
+    optional: true
+
+one_off:
+  - title: "Career fair"
+    kind: event
+    start: 2026-11-18T10:00
+    end: 2026-11-18T14:00
+    location: "Curry Student Center"

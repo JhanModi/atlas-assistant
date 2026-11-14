@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% macro pct(v) %}{{ '—' if v is none else ('%.0f%%' % (v * 100)) }}{% endmacro %}
+{% macro ms(v) %}{{ '—' if v is none else ('%.0f ms' % v if v < 1000 else '%.1f s' % (v / 1000)) }}{% endmacro %}
+{% block content %}
+<section class="metrics">
+  <h1>Metrics <span class="muted">· last {{ k.window_days }} days · {{ k.interactions }} interactions</span></h1>
+  <p class="note">Phases 1–3 record <strong>baselines</strong>. Targets are aspirational until Phase 4 (docs/04-metrics.md).
+    Intent &amp; slot accuracy are measured offline with <code>atlas bench</code> / the golden set.</p>
+
+  <div class="tiles">
+    <div class="tile"><div class="label">Task completion</div><div class="value">{{ pct(k.completion_rate) }}</div><div class="target">goal ≥ {{ pct(k.targets.completion_rate) }}</div></div>
+    <div class="tile"><div class="label">Fallback &amp; escalation</div><div class="value">{{ pct(k.fallback_rate) }}</div><div class="target">goal &lt; {{ pct(k.targets.fallback_rate) }}</div></div>
+    <div class="tile"><div class="label">Read answers p50</div><div class="value">{{ ms(k.read_latency_ms.e2e_ms.p50) }}</div><div class="target">goal &lt; {{ ms(k.targets.read_p50_ms) }}</div></div>
+    <div class="tile"><div class="label">👍 rate</div><div class="value">{{ pct(k.csat.thumbs_up_rate) }}</div><div class="target">{{ k.csat.responses }} ratings</div></div>
+    <div class="tile"><div class="label">Time saved</div><div class="value">{{ k.time_saved_hours }} h</div><div class="target">estimate, config/time_baselines.yaml</div></div>
+    <div class="tile"><div class="label">Useful alerts</div><div class="value">{{ pct(k.alerts.precision) }}</div><div class="target">{{ k.alerts.sent }} sent · Phase 2</div></div>
+  </div>
+
+  <h2>Latency, split</h2>
+  <table>
+    <thead><tr><th></th><th>p50</th><th>p95</th><th>n</th></tr></thead>
+    <tbody>
+    {% for key, label in [('e2e_ms','End-to-end (all runs)'),('ttfb_ms','First token'),('model_ms','Model time'),('tool_ms','Tool time')] %}
+      <tr><td>{{ label }}</td><td>{{ ms(k.latency_ms[key].p50) }}</td><td>{{ ms(k.latency_ms[key].p95) }}</td><td>{{ k.latency_ms[key].n }}</td></tr>
+    {% endfor %}
+      <tr><td>Answered read questions</td><td>{{ ms(k.read_latency_ms.e2e_ms.p50) }}</td><td>{{ ms(k.read_latency_ms.e2e_ms.p95) }}</td><td>{{ k.read_latency_ms.e2e_ms.n }}</td></tr>
+      <tr><td>Failed runs</td><td>{{ ms(k.failed_latency_ms.e2e_ms.p50) }}</td><td>{{ ms(k.failed_latency_ms.e2e_ms.p95) }}</td><td>{{ k.failed_latency_ms.e2e_ms.n }}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Outcomes</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Count</th></tr></thead>
+    <tbody>
+    {% for s, n in k.status_counts.items() %}<tr><td>{{ s }}</td><td>{{ n }}</td></tr>{% else %}<tr><td colspan="2" class="muted">No interactions yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Autonomy</h2>
+  <p class="muted">L0 no tools · L1 one tool · L2 cross-tool · L3 proactive · L4 proactive + auto-executed</p>
+  <table>
+    <tbody>
+    {% for lvl, n in k.autonomy_distribution.items() %}<tr><td>{{ lvl }}</td><td>{{ n }}</td></tr>{% else %}<tr><td class="muted">—</td></tr>{% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Approvals &amp; graduation</h2>
+  <table>
+    <thead><tr><th>Tool</th><th>Approved</th><th>Rejected</th><th>Eligible to graduate</th></tr></thead>
+    <tbody>
+    {% for tool, g in k.graduation.items() %}<tr><td>{{ tool }}</td><td>{{ g.approved }}</td><td>{{ g.rejected }}</td><td>{{ 'yes' if g.eligible else 'no' }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No write tools yet (Phase 4).</td></tr>{% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Weekly self-NPS <span class="muted">(single user: a trend, not a true NPS)</span></h2>
+  <form id="nps" class="nps">
+    <label>How likely would you recommend Atlas to a friend? (0–10)
+      <input type="number" id="nps-score" min="0" max="10" required>
+    </label>
+    <button type="submit">Save</button>
+    <span class="muted" id="nps-msg"></span>
+  </form>
+  <p class="muted">Recent: {{ k.self_nps_trend | join(', ') if k.self_nps_trend else '—' }}</p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/metrics.js"></script>{% endblock %}

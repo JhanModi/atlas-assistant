@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'">
+  <title>Atlas</title>
+  <link rel="stylesheet" href="/static/atlas.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Atlas <span class="muted">· local assistant</span></div>
+    <nav>
+      <a href="/" class="{{ 'active' if page == 'chat' else '' }}">Chat</a>
+      <a href="/metrics" class="{{ 'active' if page == 'metrics' else '' }}">Metrics</a>
+    </nav>
+    <div class="model muted" id="model-status" data-model="{{ model_id }}">{{ model_id }}</div>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,32 @@
+# Atlas permission policy. Enforced by deterministic hooks (src/atlas/hooks), never by the model.
+# See docs/03-security.md.
+#
+# Tiers
+#   T0  read-only                          -> runs automatically
+#   T1  reversible, low-risk write         -> needs approval (until graduated)
+#   T2  outward-facing / irreversible      -> needs approval (until graduated)
+#   T3  forbidden (delete, money, creds)   -> always cancelled
+# Any tool NOT listed here is treated as T3 (deny by default).
+#
+# output_trust
+#   trusted    structured fields from APIs or the user's own config (dates, titles from routine.yaml)
+#   untrusted  results may contain free text written by other people (email bodies, announcements)
+#              -> once seen in a run, every T1/T2 call in that run needs approval, even if graduated
+
+tools:
+  get_agenda:     { tier: T0, output_trust: trusted }
+  get_deadlines:  { tier: T0, output_trust: trusted }
+  find_conflicts: { tier: T0, output_trust: trusted }
+  get_routine:    { tier: T0, output_trust: trusted }
+  search_items:   { tier: T0, output_trust: untrusted }   # can return announcement / message text
+
+# Which tools each run context may use at all. Anything else is cancelled by the allowlist hook.
+contexts:
+  chat:      [get_agenda, get_deadlines, find_conflicts, get_routine, search_items]
+  briefing:  [get_agenda, get_deadlines, find_conflicts, get_routine]
+  proactive: [get_agenda, get_deadlines, find_conflicts, get_routine]
+  eval:      [get_agenda, get_deadlines, find_conflicts, get_routine, search_items]
+
+# Write tools the user has opted into running without approval.
+# Rule (docs/03-security.md): only after >= 20 approvals and 0 rejections, and only by editing this list yourself.
+graduated: []

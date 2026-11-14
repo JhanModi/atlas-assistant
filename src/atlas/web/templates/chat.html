@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="banner" class="banner" hidden></div>
+<section class="chat">
+  <div id="log" class="log" aria-live="polite">
+    <div class="msg atlas intro">
+      <p>Hi! Ask me about your lectures, deadlines, conflicts or routine. For example:</p>
+      <div class="chips">
+        <button type="button" class="chip">What's due this week?</button>
+        <button type="button" class="chip">Do I have any conflicts next week?</button>
+        <button type="button" class="chip">When are my lectures on Tuesday?</button>
+        <button type="button" class="chip">Anything about the midterm?</button>
+      </div>
+    </div>
+  </div>
+  <form id="ask" class="ask" autocomplete="off">
+    <input id="text" name="text" maxlength="2000" placeholder="Ask Atlas…" required>
+    <button type="submit" id="send">Send</button>
+    <button type="button" id="reset" class="ghost" title="Start a new conversation">New chat</button>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/chat.js"></script>{% endblock %}

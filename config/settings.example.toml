@@ -1,0 +1,26 @@
+# Copy to config/settings.toml (gitignored) and edit.
+# Any value can also be overridden with an environment variable, e.g. ATLAS_MODEL__MODEL_ID=qwen3:8b
+
+timezone = "America/New_York"
+data_dir = "data"                 # SQLite DB, session files and logs live here (gitignored)
+
+[model]
+provider = "ollama"               # only local providers are allowed to see private data
+host = "http://localhost:11434"
+model_id = "qwen3.5:4b"           # default chosen by `atlas bench` (docs/adr/0005-default-model.md); re-bench before changing
+temperature = 0.2
+keep_alive = "10m"                # keep the model loaded between requests to avoid reload latency
+num_ctx = 8192                    # context window; larger costs VRAM (6 GB GPU) - benchmark before raising
+think = "auto"                    # "auto": thinking off when the model allows it (faster). Some models
+                                  # (e.g. qwen3:4b) can only think; auto then keeps it on so it stays out of answers.
+
+[model.rate_limit]
+requests_per_minute = 0           # 0 = unlimited (local). Set e.g. 30 for a free cloud tier.
+
+[web]
+host = "127.0.0.1"                # never bind to 0.0.0.0: the dashboard has no login
+port = 8765
+
+[briefing]
+hour = 7
+minute = 0

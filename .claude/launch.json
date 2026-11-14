@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "atlas",
+      "runtimeExecutable": ".venv/Scripts/atlas.exe",
+      "runtimeArgs": ["serve"],
+      "port": 8765
+    }
+  ]
+}

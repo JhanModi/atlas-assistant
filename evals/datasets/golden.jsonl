@@ -1,0 +1,38 @@
+{"id": "g001", "label": "deadlines", "utterance": "What's due this week?", "tool": "get_deadlines", "args": {"start": "this week"}}
+{"id": "g002", "label": "deadlines", "utterance": "anything due tomorrow?", "tool": "get_deadlines", "args": {"start": "tomorrow"}}
+{"id": "g003", "label": "deadlines", "utterance": "When is my CS 5800 homework due?", "tool": "get_deadlines", "args": {"course": "CS 5800"}}
+{"id": "g004", "label": "deadlines", "utterance": "what do i need to submit next week", "tool": "get_deadlines", "args": {"start": "next week"}}
+{"id": "g005", "label": "deadlines", "utterance": "Do I have any assignments due before Friday?", "tool": "get_deadlines", "args": {"start": "today", "end": "friday"}}
+{"id": "g006", "label": "deadlines", "utterance": "List my DBMS deadlines", "tool": "get_deadlines", "args": {"course": "DBMS"}}
+{"id": "g007", "label": "deadlines", "utterance": "Which deadlines are coming up?", "tool": "get_deadlines", "args": {}}
+{"id": "g008", "label": "deadlines", "utterance": "is anything due today", "tool": "get_deadlines", "args": {"start": "today", "end": "today"}}
+{"id": "g009", "label": "agenda", "utterance": "What's on my schedule today?", "tool": "get_agenda", "args": {"start": "today"}}
+{"id": "g010", "label": "agenda", "utterance": "what do I have tomorrow", "tool": "get_agenda", "args": {"start": "tomorrow"}}
+{"id": "g011", "label": "agenda", "utterance": "Show me my week", "tool": "get_agenda", "args": {"start": "this week"}}
+{"id": "g012", "label": "agenda", "utterance": "Am I free on Thursday?", "tool": "get_agenda", "args": {"start": "thursday"}, "accept": ["find_conflicts"]}
+{"id": "g013", "label": "agenda", "utterance": "What's happening next week?", "tool": "get_agenda", "args": {"start": "next week"}}
+{"id": "g014", "label": "agenda", "utterance": "what's on this weekend", "tool": "get_agenda", "args": {"start": "this weekend"}}
+{"id": "g015", "label": "agenda", "utterance": "Give me my agenda for Monday", "tool": "get_agenda", "args": {"start": "monday"}}
+{"id": "g016", "label": "conflicts", "utterance": "Do I have any conflicts this week?", "tool": "find_conflicts", "args": {"start": "this week"}}
+{"id": "g017", "label": "conflicts", "utterance": "any double bookings next week?", "tool": "find_conflicts", "args": {"start": "next week"}}
+{"id": "g018", "label": "conflicts", "utterance": "Does anything clash with my lectures over the next 14 days?", "tool": "find_conflicts", "args": {"start": "next 14 days"}}
+{"id": "g019", "label": "conflicts", "utterance": "Are there overlapping events tomorrow?", "tool": "find_conflicts", "args": {"start": "tomorrow"}}
+{"id": "g020", "label": "conflicts", "utterance": "check my calendar for clashes", "tool": "find_conflicts", "args": {}}
+{"id": "g021", "label": "routine", "utterance": "When are my lectures on Tuesday?", "tool": "get_routine", "args": {"day": "tuesday"}, "accept": ["get_agenda"]}
+{"id": "g022", "label": "routine", "utterance": "What's my weekly class schedule?", "tool": "get_routine", "args": {"day": "this week"}}
+{"id": "g023", "label": "routine", "utterance": "when are office hours", "tool": "get_routine", "args": {"day": "this week"}, "accept": ["search_items"]}
+{"id": "g024", "label": "routine", "utterance": "What classes do I have next week?", "tool": "get_routine", "args": {"day": "next week"}, "accept": ["get_agenda"]}
+{"id": "g025", "label": "routine", "utterance": "Do I have class on Friday?", "tool": "get_routine", "args": {"day": "friday"}, "accept": ["get_agenda"]}
+{"id": "g026", "label": "search", "utterance": "Find the announcement about the midterm", "tool": "search_items", "args": {"query": "midterm"}}
+{"id": "g027", "label": "search", "utterance": "anything about the career fair?", "tool": "search_items", "args": {"query": "career fair"}}
+{"id": "g028", "label": "search", "utterance": "Where is my DBMS lecture held?", "tool": "search_items", "args": {"query": "DBMS"}, "accept": ["get_routine"]}
+{"id": "g029", "label": "search", "utterance": "search for the project proposal", "tool": "search_items", "args": {"query": "project proposal"}, "accept": ["get_deadlines"]}
+{"id": "g030", "label": "search", "utterance": "When is the robotics club meeting?", "tool": "search_items", "args": {"query": "robotics"}, "accept": ["get_agenda"]}
+{"id": "g031", "label": "out_of_scope", "utterance": "Send an email to my professor saying I'll be late", "tool": null, "args": {}}
+{"id": "g032", "label": "out_of_scope", "utterance": "What's the weather in Boston?", "tool": null, "args": {}}
+{"id": "g033", "label": "out_of_scope", "utterance": "Write me a poem about algorithms", "tool": null, "args": {}}
+{"id": "g034", "label": "out_of_scope", "utterance": "Buy me a coffee", "tool": null, "args": {}}
+{"id": "g035", "label": "multi", "utterance": "What's due this week and do I have any conflicts?", "tool": "get_deadlines", "args": {"start": "this week"}, "expect_all": ["get_deadlines", "find_conflicts"]}
+{"id": "g036", "label": "multi", "utterance": "Plan my week: deadlines, clashes and my lectures", "tool": "get_deadlines", "args": {"start": "this week"}, "expect_all": ["get_deadlines", "find_conflicts", "get_routine"], "accept": ["get_agenda", "find_conflicts", "get_routine"]}
+{"id": "g037", "label": "agenda", "utterance": "What do I have on Tuesday?", "tool": "get_agenda", "args": {"start": "tuesday"}}
+{"id": "g038", "label": "agenda", "utterance": "what's on monday", "tool": "get_agenda", "args": {"start": "monday"}}
