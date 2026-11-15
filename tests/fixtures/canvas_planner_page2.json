@@ -1,0 +1,16 @@
+[
+  {"context_type": "Course", "course_id": 101, "plannable_id": "601", "plannable_type": "calendar_event",
+   "planner_override": null, "html_url": "/calendar?event_id=601", "submissions": false,
+   "plannable": {"id": 601, "title": "Midterm review session", "start_at": "2026-11-17T21:00:00Z",
+                 "end_at": "2026-11-17T22:00:00Z", "all_day": false, "location_name": "West Village H 108"}},
+  {"context_type": "User", "course_id": null, "plannable_id": "602", "plannable_type": "planner_note",
+   "planner_override": null, "html_url": null, "submissions": false,
+   "plannable": {"id": 602, "title": "Email advisor about spring courses", "todo_date": "2026-11-20T17:00:00Z",
+                 "workflow_state": "active"}},
+  {"context_type": "Course", "course_id": 101, "plannable_id": "603", "plannable_type": "announcement",
+   "planner_override": null, "html_url": "/courses/101/discussion_topics/603", "submissions": false,
+   "plannable": {"id": 603, "title": "Duplicate of an announcement", "posted_at": "2026-11-12T15:00:00Z"}},
+  {"context_type": "Course", "course_id": 102, "plannable_id": "604", "plannable_type": "assignment",
+   "planner_override": null, "html_url": "/courses/102/assignments/604", "submissions": false,
+   "plannable": {"id": 604, "title": "Undated extra credit", "due_at": null}}
+]

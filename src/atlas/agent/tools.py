@@ -22,9 +22,10 @@ from atlas.store.models import Item
 from atlas.timeline import find_overlaps
 
 MAX_RESULTS = 25
-DONE_STATUSES = {"submitted", "graded", "done", "completed"}
+DONE_STATUSES = {"submitted", "graded", "done", "completed", "excused"}
 
 TOOL_NAMES = ["get_agenda", "get_deadlines", "find_conflicts", "get_routine", "search_items"]
+CLASS_KINDS = ["lecture", "lab", "office_hours", "recitation"]
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -82,6 +83,8 @@ def item_view(item: Item, include_body: bool = False) -> dict[str, Any]:
     ):
         if value is not None:
             view[key] = value
+    if item.trust == "untrusted":
+        view["untrusted"] = True  # written by a third party (e.g. an invite); TaintHook reacts to this flag
     if include_body and item.body:
         view["text"] = wrap_untrusted(item.body)
     return view
@@ -186,10 +189,10 @@ def make_tools(engine: Engine) -> list:
 
     @tool
     def get_routine(day: str = "this week") -> dict:
-        """Show ONLY recurring classes (lectures, labs, office hours) for a day or week. Events, meetings and
-        deadlines are NOT included: for "what do I have" or "am I free" questions use get_agenda instead.
+        """Show ONLY recurring classes (lectures, labs, office hours). Events, meetings and deadlines are NOT
+        included: for "what do I have" or "am I free" questions use get_agenda instead.
 
-        Use for: "when are my lectures on Tuesday", "what's my weekly class schedule", "when is my next CS 5800 lecture".
+        Use for: "when are my lectures", "what's my weekly class schedule", "when is my next CS 5800 lecture".
 
         Args:
             day: A day or range in the user's words, e.g. "tuesday", "tomorrow", "this week", "next week".
@@ -199,13 +202,23 @@ def make_tools(engine: Engine) -> list:
             rows = db.exec(
                 select(Item).where(
                     col(Item.source).in_(["routine", "demo"]),
-                    col(Item.kind).in_(["lecture", "lab", "office_hours", "recitation"]),
+                    col(Item.kind).in_(CLASS_KINDS),
                     col(Item.start) >= s,
                     col(Item.start) < e,
                 )
             ).all()
+            # Deterministic backstop: small models sometimes pick this tool for "what do I have on <day>".
+            # Say so when other commitments exist in the range, so the answer can't silently drop them.
+            others = [i for i in db.exec(select(Item).where(
+                ~col(Item.kind).in_(CLASS_KINDS + ["announcement"]),
+                or_(and_(col(Item.start) >= s, col(Item.start) < e), and_(col(Item.due) >= s, col(Item.due) < e)),
+            )).all() if (i.status or "") not in {"cancelled", "declined"} and i.id not in {r.id for r in rows}]
         rows.sort(key=lambda i: i.start)
-        return _result(rows, s, e)
+        result = _result(rows, s, e)
+        if others:
+            result["not_shown"] = (f"{len(others)} other event(s) or deadline(s) in this range are not classes and "
+                                   "are not listed here. Call get_agenda for the full schedule.")
+        return result
 
     @tool
     def search_items(query: str, source: str = "", start: str = "", end: str = "") -> dict:

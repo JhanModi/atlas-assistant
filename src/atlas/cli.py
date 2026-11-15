@@ -6,6 +6,8 @@
   atlas serve                   local dashboard on http://127.0.0.1:8765
   atlas bench [--models ...]    benchmark local models (VRAM, speed, tool-call validity, latency)
   atlas kpis [--days 7]         print the KPI baseline
+  atlas auth canvas|gcal|status store credentials you enter (OS keyring); show source health
+  atlas sync [--source S] [--dry-run]   sync routine / Canvas / Google Calendar into the store
 """
 
 from __future__ import annotations
@@ -143,7 +145,184 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_bench(args: argparse.Namespace) -> int:
     from atlas.evaluation.bench import run_bench
 
-    return run_bench(models=args.models, contexts=args.ctx, quick=args.quick)
+    return run_bench(models=args.models, contexts=args.ctx, quick=args.quick, now=args.now)
+
+
+def _reset_sync_state(source: str) -> None:
+    """After a successful sign-in, clear needs_reauth/backoff so the next sync runs."""
+    from atlas.store import SyncState, get_engine, session_scope
+
+    with session_scope(get_engine()) as db:
+        state = db.get(SyncState, source)
+        if state:
+            state.status, state.consecutive_failures, state.next_attempt_at = "never", 0, None
+            db.add(state)
+            db.commit()
+
+
+def _check_feed(source: str, url: str, flavor: str) -> int:
+    import icalendar
+
+    from atlas.config import get_settings
+    from atlas.connectors.base import SourceError
+    from atlas.connectors.ics_feed import IcsFeedConnector
+
+    try:
+        raw = IcsFeedConnector(source, url, get_settings().sync, flavor, "atlas auth").download()
+        events = icalendar.Calendar.from_ical(raw).walk("VEVENT")
+    except (SourceError, ValueError) as exc:
+        print(f"That feed didn't work: {exc}. Nothing was saved.")
+        return 1
+    except Exception as exc:  # noqa: BLE001 - network errors; never echo the URL
+        print(f"Couldn't download the feed ({type(exc).__name__}). Nothing was saved.")
+        return 1
+    print(f"Feed OK: {len(events)} events.")
+    return 0
+
+
+def cmd_auth(args: argparse.Namespace) -> int:
+    import getpass
+
+    from atlas.config import get_settings
+    from atlas.vault import KNOWN, get_store
+
+    store, s = get_store(), get_settings()
+    if args.target == "status":
+        return cmd_auth_status(store, s)
+    if args.target == "forget":
+        for name in KNOWN.get(args.source or "", []):
+            store.delete(name)
+        print(f"Removed stored credentials for {args.source}." if args.source in KNOWN else
+              f"Use: atlas auth forget {'|'.join(KNOWN)}")
+        return 0 if args.source in KNOWN else 2
+
+    if args.target == "canvas" and args.ics:
+        print("Canvas -> Calendar -> 'Calendar Feed' (bottom right) -> copy the link.")
+        url = getpass.getpass("Paste the feed URL (input hidden): ").strip()
+        if _check_feed("canvas", url, "canvas"):
+            return 1
+        store.set("canvas.ics_url", url)
+        print('Saved to Windows Credential Manager. Set [sources.canvas] enabled = true, mode = "ics".')
+    elif args.target == "canvas":
+        import httpx
+
+        from atlas.connectors.base import NotConfigured, make_client
+        from atlas.connectors.canvas import normalize_base_url
+
+        try:
+            base = normalize_base_url(s.sources.canvas.base_url)
+        except NotConfigured as exc:
+            print(exc)
+            return 2
+        print(f"Canvas ({base}) -> Account -> Settings -> '+ New Access Token'. Give it a purpose and expiry date.")
+        token = getpass.getpass("Paste the token (input hidden): ").strip()
+        try:
+            with make_client(base_url=base, headers={"Authorization": f"Bearer {token}"}) as c:
+                r = c.get("/api/v1/users/self")
+        except httpx.HTTPError as exc:
+            print(f"Couldn't reach Canvas ({type(exc).__name__}). Nothing was saved.")
+            return 1
+        if r.status_code != 200:
+            print(f"Canvas did not accept that token (HTTP {r.status_code}). Nothing was saved.")
+            return 1
+        store.set("canvas.token", token)
+        print("Token accepted and saved to Windows Credential Manager. Set [sources.canvas] enabled = true.")
+    elif args.target == "gcal" and args.ics:
+        print("Google Calendar -> Settings -> your calendar -> 'Secret address in iCal format' -> copy.")
+        url = getpass.getpass("Paste the secret address (input hidden): ").strip()
+        if _check_feed("gcal", url, "generic"):
+            return 1
+        store.set("gcal.ics_url", url)
+        print('Saved to Windows Credential Manager. Set [sources.gcal] enabled = true, mode = "ics".')
+    elif args.target == "gcal":
+        import webbrowser
+        from pathlib import Path
+
+        from atlas.connectors.base import AuthError
+        from atlas.connectors.gcal import run_consent_flow
+
+        if not args.client_file:
+            print("Pass the OAuth client file you downloaded: atlas auth gcal --client-file client_secret_XXXX.json")
+            return 2
+        try:
+            info = json.loads(Path(args.client_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"Can't read {args.client_file}: {exc}")
+            return 2
+        if "installed" not in info:
+            print('That is not a "Desktop app" OAuth client. Create one of type Desktop app and download its JSON.')
+            return 2
+        cid, csecret = info["installed"].get("client_id"), info["installed"].get("client_secret")
+
+        def _open(url: str) -> None:
+            print("Opening your browser to sign in to Google (read-only calendar access).")
+            print(f"If it doesn't open, visit this address yourself:\n{url}\n")
+            webbrowser.open(url)
+
+        try:
+            refresh = run_consent_flow(cid, csecret, open_browser=_open)
+        except AuthError as exc:
+            print(exc)
+            return 1
+        store.set("gcal.client_id", cid)
+        store.set("gcal.client_secret", csecret)
+        store.set("gcal.refresh_token", refresh)
+        print("Signed in. Credentials saved to Windows Credential Manager. Set [sources.gcal] enabled = true.")
+        print(f"You can now delete {args.client_file} (it is also gitignored).")
+    else:
+        print("Use: atlas auth canvas [--ics] | gcal [--client-file F | --ics] | status | forget SOURCE")
+        return 2
+    _reset_sync_state(args.target)
+    return 0
+
+
+def cmd_auth_status(store, s) -> int:
+    from sqlmodel import select
+
+    from atlas import timeutil
+    from atlas.store import SyncState, get_engine, session_scope
+    from atlas.vault import KNOWN
+
+    with session_scope(get_engine()) as db:
+        states = {st.source: st for st in db.exec(select(SyncState)).all()}
+    print("Sources (credentials are shown only as present/absent)\n")
+    for name, cfg in (("routine", s.sources.routine), ("canvas", s.sources.canvas), ("gcal", s.sources.gcal)):
+        mode = getattr(cfg, "mode", "file")
+        stored = [k.split(".", 1)[1] for k in KNOWN.get(name, []) if store.get(k)]
+        st = states.get(name)
+        health = (f"{st.status}, last success {timeutil.fmt_local(st.last_success_at) or 'never'}"
+                  + (f", error: {st.last_error}" if st.last_error else "")) if st else "never synced"
+        print(f"  {name:8} {'enabled ' if cfg.enabled else 'disabled'} mode={mode:5} "
+              f"stored={','.join(stored) or '-':30} {health}")
+    return 0
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    from atlas import timeutil
+    from atlas.config import get_settings
+    from atlas.connectors import build_connectors, sync_source
+    from atlas.store import get_engine
+
+    s = get_settings()
+    connectors = build_connectors(s, only=args.source)
+    if not connectors:
+        print("No sources enabled. Enable them under [sources.*] in config/settings.toml.")
+        return 2
+    worst = 0
+    for conn in connectors:
+        report = sync_source(get_engine(), conn, s.sync, force=args.force, dry_run=args.dry_run)
+        print(report.line())
+        worst = max(worst, 0 if report.status == "ok" or report.skipped else 1)
+        if args.dry_run and report.items:
+            for it in sorted(report.items, key=lambda i: i.start or i.due)[:80]:
+                when = timeutil.fmt_local(it.due or it.start)
+                flags = " ".join(f for f in (it.status, "untrusted" if it.trust == "untrusted" else None) if f)
+                print(f"    {when:22} {it.kind:12} {it.title[:60]:60} {it.course or '':12} {flags}")
+            if len(report.items) > 80:
+                print(f"    ... and {len(report.items) - 80} more")
+    if args.dry_run:
+        print("\nDry run: nothing was saved.")
+    return worst
 
 
 def cmd_kpis(args: argparse.Namespace) -> int:
@@ -181,7 +360,21 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--models", nargs="+", default=["qwen3.5:4b", "qwen3:8b", "qwen3:4b"])  # slowest last
     b.add_argument("--ctx", nargs="+", type=int, default=[4096, 8192, 16384], help="num_ctx values to probe for VRAM")
     b.add_argument("--quick", action="store_true", help="fewer golden cases, one context size")
+    b.add_argument("--now", default="2026-11-13T09:00:00",
+                   help="reference date/time for the run (default: the test suite's Friday, so runs on different "
+                        "days are comparable); 'live' = real clock")
     b.set_defaults(func=cmd_bench)
+    au = sub.add_parser("auth", help="store credentials for a source (you type them; saved in the OS keyring)")
+    au.add_argument("target", choices=["canvas", "gcal", "status", "forget"])
+    au.add_argument("source", nargs="?", help="for `forget`: canvas or gcal")
+    au.add_argument("--ics", action="store_true", help="use a calendar feed URL instead of the API")
+    au.add_argument("--client-file", help="gcal: the Desktop-app OAuth client JSON you downloaded")
+    au.set_defaults(func=cmd_auth)
+    sy = sub.add_parser("sync", help="sync enabled sources into the local store")
+    sy.add_argument("--source", choices=["routine", "canvas", "gcal"])
+    sy.add_argument("--dry-run", action="store_true", help="fetch and print normalized items without saving")
+    sy.add_argument("--force", action="store_true", help="ignore backoff / needs-reauth parking")
+    sy.set_defaults(func=cmd_sync)
     k = sub.add_parser("kpis", help="print KPI baseline")
     k.add_argument("--days", type=int, default=7)
     k.set_defaults(func=cmd_kpis)

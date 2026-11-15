@@ -1,10 +1,13 @@
 """Data-flow tracking: once untrusted third-party text enters a run, the run is tainted.
 
-A tainted run can't use graduated (auto-approved) writes: every write needs explicit approval.
+Two signals: the tool's declared output trust (policy.yaml), and any returned item flagged "untrusted": true
+(e.g. a calendar invite written by someone else, which can appear in get_agenda). A tainted run can't use
+graduated (auto-approved) writes: every write needs explicit approval.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
@@ -26,6 +29,19 @@ class TaintHook(HookProvider):
         if run is None:
             return
         name = event.tool_use["name"]
-        status = (event.result or {}).get("status")
-        if status == "success" and self.policy.tool(name).output_trust == "untrusted":
+        result = event.result or {}
+        if result.get("status") != "success":
+            return
+        if self.policy.tool(name).output_trust == "untrusted" or _flags_untrusted(result):
             run.tainted = True
+
+
+def _flags_untrusted(result: dict) -> bool:
+    """Strands serializes dict results with json.dumps, so the flag appears verbatim in the text content."""
+    for block in result.get("content") or []:
+        if isinstance(block, dict):
+            if '"untrusted": true' in str(block.get("text", "")):
+                return True
+            if isinstance(block.get("json"), dict) and '"untrusted": true' in json.dumps(block["json"]):
+                return True
+    return False

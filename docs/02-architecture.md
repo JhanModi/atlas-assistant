@@ -16,7 +16,10 @@
  Sanitized response → web dashboard (127.0.0.1) / Windows toast
 ```
 
-- **Connectors** never call the model. They turn every source into the same `Item` shape.
+- **Connectors** never call the model. They turn every source into the same `Item` shape (`src/atlas/connectors/`, [ADR-0006](adr/0006-sync-layer-design.md)).
+  - Each sync refreshes a fixed window (yesterday through 30 days out) and replaces only what that window covers.
+  - A failed sync changes no data.
+  - An expired sign-in parks the source as `needs_reauth`; other failures back off. There are no retry loops.
 - **Ordinary code** does dates, overlaps, deadlines, authorization and scheduling. The model interprets the request, picks tools and explains results.
 - **One agent with ≤5 tools** (Phase 1–3). Specialist agents are split out only when evals show the single agent struggling (ADR-0003).
 
@@ -39,8 +42,8 @@ Approval pauses use Strands interrupts: the run returns `stop_reason == "interru
 
 | Table | Purpose |
 |---|---|
-| `Item` | One normalized thing: event, lecture, deadline, message, notification. `id = "<source>:<source_id>"`. Includes `trust` and `private`. |
-| `SyncState` | Per-source cursor (syncToken / historyId / ETag), last success and error. |
+| `Item` | One normalized thing: event, lecture, deadline, message, notification. `id = "<source>:<source_id>"`. Includes `trust`, `private` and `first_seen_at` (used to spot new announcements). |
+| `SyncState` | Per-source health: `status` (never / ok / error / rate_limited / needs_reauth / not_configured), last attempt and last success, backoff (`next_attempt_at`, `consecutive_failures`), and an error message with URLs and tokens removed. |
 | `Interaction` | One request/run: context, text, status, tools used, split latency, tokens, model id. |
 | `ToolCall` | Every tool call: tier, decision (auto/approved/rejected/blocked), duration, status. |
 | `Approval` | Pending/decided approval requests linked to a Strands interrupt id. |
@@ -55,7 +58,9 @@ All datetimes are stored in UTC and converted to `settings.timezone` (America/Ne
 src/atlas/
   config.py          settings.toml + policy.yaml + time_baselines.yaml loaders
   timeutil.py        timezone + natural-language date ranges (dateparser) - slots are normalized here
-  store/             SQLModel tables + engine/session helpers
+  store/             SQLModel tables + engine/session helpers + forward-only column migration
+  connectors/        base (coverage, sync runner), routine, ics_feed, canvas, gcal (+ OAuth loopback/PKCE)
+  vault.py           credentials in the OS keyring (never in files or the DB)
   agent/             model factory, system prompt, the 5 read tools, Assistant (runtime pipeline)
   hooks/             allowlist, taint, approval gate, rate limiter, metrics, audit log
   security/          output sanitizer, argument validation

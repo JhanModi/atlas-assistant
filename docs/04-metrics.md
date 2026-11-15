@@ -61,4 +61,4 @@ For each completed interaction, add the minutes from `config/time_baselines.yaml
 - From Phase 4, the **edit distance** of approved drafts is tracked as an implicit signal.
 
 ## Baselines log
-Record baselines in phase gate ADRs (`docs/adr/`). Current baseline ([ADR-0005](adr/0005-default-model.md)): "Phase 1, qwen3.5:4b, 8k ctx, demo data: intent 1.00 (38 cases), slots 0.98, scenarios 8/8, p50 e2e 2.6 s (p95 8.2 s), first token 1.8 s".
+Record baselines in phase gate ADRs (`docs/adr/`). Current baseline ([ADR-0005](adr/0005-default-model.md), re-run 2026-11-14): "qwen3.5:4b, 8k ctx, demo data, reference Friday: intent 1.00 (38 cases), slots 0.98, scenarios 8/8, weekday sweep 28/28, p50 e2e 2.6 s (p95 7.5 s), first token 1.8 s".

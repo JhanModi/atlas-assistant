@@ -63,16 +63,25 @@ class Item(SQLModel, table=True):
     status: Optional[str] = None  # e.g. submitted | missing | graded | optional | cancelled
     body: Optional[str] = None  # free text written by others -> untrusted
     private: bool = True
-    trust: str = "trusted"  # trusted | untrusted (body present from a third party)
+    trust: str = "trusted"  # trusted | untrusted (text written by a third party, e.g. an invite from someone else)
     updated_at: Optional[datetime] = _dt()
     synced_at: datetime = _dt(nullable=False, default_now=True)
+    first_seen_at: Optional[datetime] = _dt()  # set once, on the first sync that saw it ("new announcement")
 
 
 class SyncState(SQLModel, table=True):
+    """Health of one source. Sync never retries in a loop: failures back off until the next scheduled attempt."""
+
     source: str = Field(primary_key=True)
     cursor: Optional[str] = None
+    # never | ok | error | rate_limited | needs_reauth | not_configured
+    status: str = "never"
+    last_attempt_at: Optional[datetime] = _dt()
     last_success_at: Optional[datetime] = _dt()
-    last_error: Optional[str] = None
+    next_attempt_at: Optional[datetime] = _dt()
+    consecutive_failures: int = 0
+    item_count: Optional[int] = None
+    last_error: Optional[str] = None  # never contains secrets (feed URLs and tokens are redacted)
     last_duration_ms: Optional[int] = None
 
 

@@ -14,6 +14,8 @@ All inputs are synthetic; nothing leaves the laptop.
 from __future__ import annotations
 
 import json
+import os
+import re
 import time
 import uuid
 from datetime import datetime
@@ -189,6 +191,50 @@ class VramSampler:
             self._thread.join(timeout=2)
 
 
+# The system prompt carries today's date, and small models can answer differently depending on the weekday
+# (2026-11-14: "What do I have on Tuesday?" picked the classes-only tool 10/10 on a Saturday, 0/10 on Friday).
+# So runs are pinned to one reference "now" (the test suite's Friday) to stay comparable across days, and a
+# separate sweep checks answers on every weekday.
+REFERENCE_NOW = "2026-11-13T09:00:00"
+SWEEP_DAYS = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"]
+SWEEP_QUESTIONS = [("What do I have on Tuesday?", "tuesday", "all"), ("what's on monday", "monday", "all"),
+                   ("Am I free on Thursday?", "thursday", "all"), ("When are my lectures on Tuesday?", "tuesday", "classes")]
+
+
+def _norm(text: str) -> str:
+    return " " + " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split()) + " "
+
+
+def _weekday_sweep(model_id: str) -> dict[str, Any]:
+    """Ask day questions as if it were each day of a week; an answer is complete if it names every item the
+    tool returns for that day (what the user needs, whichever tool path the model took)."""
+    from atlas.agent.tools import make_tools
+
+    saved = os.environ.get("ATLAS_NOW")
+    runs, misses = 0, []
+    try:
+        for day in SWEEP_DAYS:
+            os.environ["ATLAS_NOW"] = f"{day}T09:00:00"
+            assistant, engine = _assistant(model_id)
+            tools = {t.tool_name: t for t in make_tools(engine)}
+            for question, dayword, scope in SWEEP_QUESTIONS:
+                if scope == "all":
+                    truth = {i["title"] for i in tools["get_agenda"](start=dayword)["items"] if i["kind"] != "announcement"}
+                else:
+                    truth = {i["title"] for i in tools["get_routine"](day=dayword)["items"]}
+                r = assistant.handle(question, context="eval", session_id=f"sweep-{day}-{dayword}-{scope}")
+                runs += 1
+                missing = sorted(t for t in truth if _norm(t) not in _norm(r.reply))
+                if missing:
+                    misses.append({"day": day, "question": question, "tools": r.tools, "missing": missing})
+    finally:
+        if saved is None:
+            os.environ.pop("ATLAS_NOW", None)
+        else:
+            os.environ["ATLAS_NOW"] = saved
+    return {"runs": runs, "complete": runs - len(misses), "misses": misses}
+
+
 def _bench_model(client, model: str, contexts: list[int], cases: list[dict]) -> dict[str, Any]:
     settings = get_settings()
     out: dict[str, Any] = {"model": model}
@@ -225,6 +271,8 @@ def _bench_model(client, model: str, contexts: list[int], cases: list[dict]) -> 
         out["long_email"] = _long_email_test(model)
         print("  3-step request ...", flush=True)
         out["multistep"] = _multistep_test(assistant, engine)
+        print(f"  weekday sweep ({len(SWEEP_DAYS)} days x {len(SWEEP_QUESTIONS)} questions) ...", flush=True)
+        out["weekday_sweep"] = _weekday_sweep(model)
     out["peak_vram_mb"] = vram.peak_mb or None
     out["baseline_vram_mb"] = vram.baseline_mb
     try:
@@ -272,6 +320,9 @@ def _markdown(report: dict[str, Any]) -> str:
     row("~3k-token email: latency", lambda r: _fmt(r["long_email"].get("e2e_ms"), " ms"))
     row("~3k-token email: injection resisted", lambda r: _fmt(r["long_email"].get("injection_resisted")))
     row("3-step request: all steps", lambda r: _fmt(r["multistep"].get("all_three_steps")))
+    row("Weekday sweep: complete answers", lambda r: (f"{r['weekday_sweep']['complete']}/{r['weekday_sweep']['runs']}"
+                                                      if r.get("weekday_sweep") else "—"))
+    lines += ["", f"Reference date for golden set and scenarios: {report.get('reference_now', 'live clock')}", ""]
     lines += ["", f"**Suggested default:** {report['suggestion']}", "",
               "Golden set is small (seed v0), so accuracy differences under ~5 points are noise. Grow it in Phase 3.", ""]
     for r in report["results"]:
@@ -294,6 +345,16 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append("Golden-set misses:")
         for m in r["golden"]["misses"] or [None]:
             lines.append("- none" if m is None else f"- {m['utterance']} → expected `{m['expected']}`, got `{m['got']}`")
+        lines.append("")
+        lines.append("Slot misses (right tool, wrong arguments):")
+        for m in r["golden"].get("slot_misses") or [None]:
+            lines.append("- none" if m is None else
+                         f"- {m['utterance']} → expected {m['expected_args']}, got {m['got_args']} ({m['matched']})")
+        lines.append("")
+        lines.append("Weekday sweep misses:")
+        for m in (r.get("weekday_sweep") or {}).get("misses") or [None]:
+            lines.append("- none" if m is None else
+                         f"- as of {m['day']}: \"{m['question']}\" → tools {m['tools']}; missing {m['missing']}")
         lines.append("")
     return "\n".join(lines)
 
@@ -336,9 +397,11 @@ def suggest(results: list[dict[str, Any]], num_ctx: int) -> str:
             f"{gpu(pick)}% on GPU. Others: {others or 'none'}{note}")
 
 
-def run_bench(models: list[str], contexts: list[int], quick: bool = False) -> int:
+def run_bench(models: list[str], contexts: list[int], quick: bool = False, now: str = REFERENCE_NOW) -> int:
     import ollama
 
+    if now != "live":
+        os.environ["ATLAS_NOW"] = now  # comparable runs whatever day the bench is started (see REFERENCE_NOW)
     settings = get_settings()
     client = ollama.Client(host=settings.model.host)
     try:
@@ -368,6 +431,7 @@ def run_bench(models: list[str], contexts: list[int], quick: bool = False) -> in
             "num_ctx": settings.model.num_ctx,
             "think": settings.model.think,
             "contexts": contexts,
+            "reference_now": now,
             "results": results,
             "suggestion": suggest(results, settings.model.num_ctx),
         }

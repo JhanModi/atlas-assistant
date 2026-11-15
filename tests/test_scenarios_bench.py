@@ -74,5 +74,26 @@ def test_suggest_excludes_models_that_spill_off_gpu():
     assert suggest([small, big], 8192).startswith("s:4b")
 
 
+def test_markdown_lists_slot_and_weekday_misses():
+    from atlas.evaluation.bench import _markdown
+
+    r = _result("m:4b", 1.0, 1.0, 2000, 100, 3000)
+    r.update({"vram": [], "think": False, "speed": {}, "long_email": {}, "multistep": {},
+              "weekday_sweep": {"runs": 28, "complete": 27, "misses": [
+                  {"day": "2026-11-21", "question": "What do I have on Tuesday?", "tools": ["get_routine"],
+                   "missing": ["Career fair"]}]}})
+    r["scenarios"].update({"passed": 8, "scenarios": 8, "incorrect_tool_calls": 0, "failed": []})
+    r["golden"].update({"slot_accuracy": 0.9, "by_label": {}, "ttfb_ms": {"p50": 1}, "model_ms": {"p50": 1},
+                        "tool_ms": {"p50": 1}, "misses": [],
+                        "slot_misses": [{"utterance": "due this week?", "expected_args": {"start": "this week"},
+                                         "got_args": {"start": "next week"}, "matched": "0/2"}]})
+    r["golden"]["e2e_ms"]["p95"] = 3000
+    md = _markdown({"started": "x", "num_ctx": 8192, "think": "auto", "contexts": [], "results": [r],
+                    "suggestion": "m:4b", "reference_now": "2026-11-13T09:00:00"})
+    assert "| Weekday sweep: complete answers | 27/28 |" in md
+    assert "due this week? → expected {'start': 'this week'}, got {'start': 'next week'} (0/2)" in md
+    assert "as of 2026-11-21" in md and "Reference date for golden set and scenarios: 2026-11-13T09:00:00" in md
+
+
 def test_quality_penalizes_unsafe_behaviour():
     assert quality(_result("m", 1.0, 1.0, 1, 100, 1, exfil=1)) < quality(_result("m", 1.0, 1.0, 1, 100, 1))

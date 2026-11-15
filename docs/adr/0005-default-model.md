@@ -104,6 +104,41 @@ Each column comes from the latest valid run for that model. Reports are in `eval
 - **Re-run `atlas bench` whenever the model, the system prompt or the tool descriptions change.** Each of these moved results in this round.
 - To do: repeat runs (n ≥ 3) per model to measure variance before Phase 4 makes the KPI targets binding.
 
+## Addendum, 2026-11-14: answers depend on the weekday in the prompt
+A re-benchmark run on a Saturday showed one golden miss: "What do I have on Tuesday?" went to `get_routine` (classes only), so the answer dropped the Career fair. Repeating the question gave **10/10** misses on Saturday, against 0 on Friday. At temperature 0.2 the model is nearly deterministic for a given prompt, and the prompt includes today's date. So the 2026-11-13 tool-description fix held only for Friday's prompt.
+
+**Fixes:**
+- Removed the "lectures on Tuesday" example from `get_routine`'s description; it attracted day questions.
+- Added a deterministic backstop: when `get_routine` runs and the same range contains events or deadlines, its result says so (`not_shown`) and points to `get_agenda`.
+- Measured across all seven weekdays, 2 repetitions each: 56/56 complete answers, with the intended tool chosen first every time.
+
+**Benchmark method changes:**
+- `atlas bench` now pins "now" to the test suite's Friday (`--now`; `live` uses the real clock), so runs on different days are comparable.
+- Every run includes a **weekday sweep**: 4 day questions × 7 reference days. An answer counts as complete when it names every item the tool returns for that day.
+- The report now lists slot misses individually, so a wrong-tool case is no longer hidden inside the slot score.
+
+**Rejected change (measured, then reverted):** I tried a `get_deadlines` description telling the model to pass `end="today"` for single-day questions. "Due today" became exact, but the model then copied `end="today"` into open questions:
+- "What's due?": 2 of 3 runs.
+- "When is my CS 5800 homework due?": 3 of 3 runs.
+
+Either would miss Homework 4, due tomorrow. That's worse than the problem it fixed, so I reverted it.
+
+**Re-benchmark on the committed code (2026-11-14 20:10, reference Friday):**
+
+| Metric | Result |
+|---|---|
+| Scenarios | 8/8 |
+| Intent accuracy | 1.00 |
+| Slot accuracy | 0.981 |
+| Weekday sweep | 28/28 |
+| Hallucinations / exfiltration | 0 / 0 |
+| p50 / p95 latency | 2.6 s / 7.5 s |
+| First token | 1.8 s |
+
+**Known limitations, for Phase 3:**
+- The model sends `start="today"` both for "due today?" and for open questions ("what's due?", "coming up", "soon"). The tool can't tell them apart, so a bare "today" covers the next 14 days. "Due today?" therefore lists more than asked, each item labelled with its date.
+- "When are office hours" re-queries `get_routine` 2–6 times (this week, then next week), with or without the backstop note. Some answers give only the past session. Grow the golden set with answer-level checks for these.
+
 ## Decision to proceed
 Proceed to **Phase 2: a reliable daily briefing.**
 - Canvas sync: a personal token, or the ICS feed as a fallback.

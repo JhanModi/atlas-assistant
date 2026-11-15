@@ -32,7 +32,30 @@ def make_engine(url: str) -> Engine:
         cur.close()
 
     SQLModel.metadata.create_all(engine)
+    add_missing_columns(engine)
     return engine
+
+
+def add_missing_columns(engine: Engine) -> list[str]:
+    """Tiny forward-only migration: add columns that newer code defines but an existing database lacks.
+
+    create_all() creates missing tables but never alters existing ones. New columns are nullable or have a
+    scalar default, so ALTER TABLE ADD COLUMN is safe. Returns the "table.column" names that were added.
+    """
+    added: list[str] = []
+    with engine.begin() as conn:
+        for table in SQLModel.metadata.sorted_tables:
+            existing = {row[1] for row in conn.exec_driver_sql(f'PRAGMA table_info("{table.name}")')}
+            for col in table.columns:
+                if col.name in existing:
+                    continue
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'
+                default = getattr(col.default, "arg", None)
+                if isinstance(default, (bool, int, float, str)):
+                    ddl += f" DEFAULT {int(default) if isinstance(default, bool) else repr(default)}"
+                conn.exec_driver_sql(ddl)
+                added.append(f"{table.name}.{col.name}")
+    return added
 
 
 @lru_cache

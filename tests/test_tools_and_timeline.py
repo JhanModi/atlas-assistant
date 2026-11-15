@@ -63,6 +63,23 @@ def test_get_routine_tuesday(demo_engine):
     out = call(demo_engine, "get_routine", day="tuesday")
     assert [i["title"] for i in out["items"]] == ["CS 5800 Algorithms - Lecture"]
     assert out["items"][0]["start"].startswith("2026-11-17T11:45")
+    # Backstop: the Career fair and the proposal deadline are that Tuesday too, so the result must say so
+    assert "2 other event(s) or deadline(s)" in out["not_shown"] and "get_agenda" in out["not_shown"]
+
+
+def test_get_routine_has_no_backstop_note_when_only_classes(engine):
+    from datetime import datetime
+
+    from sqlmodel import Session
+
+    from atlas import timeutil
+
+    zone = timeutil.tz()
+    with Session(engine) as db:
+        db.add(Item(id="routine:x", source="routine", source_id="x", kind="lecture", title="L",
+                    start=datetime(2026, 11, 17, 10, tzinfo=zone), end=datetime(2026, 11, 17, 11, tzinfo=zone)))
+        db.commit()
+    assert "not_shown" not in call(engine, "get_routine", day="tuesday")
 
 
 def test_search_wraps_untrusted_text(demo_engine):

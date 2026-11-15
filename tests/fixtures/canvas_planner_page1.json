@@ -1,0 +1,22 @@
+[
+  {"context_type": "Course", "course_id": 101, "plannable_id": "501", "plannable_type": "assignment",
+   "planner_override": null, "html_url": "/courses/101/assignments/501",
+   "submissions": {"excused": false, "graded": false, "late": false, "missing": false, "needs_grading": false, "with_feedback": false},
+   "plannable": {"id": 501, "title": "Homework 4", "due_at": "2026-11-15T04:59:00Z", "updated_at": "2026-11-01T12:00:00Z"}},
+  {"context_type": "Course", "course_id": 102, "plannable_id": "502", "plannable_type": "quiz",
+   "planner_override": null, "html_url": "/courses/102/quizzes/502",
+   "submissions": {"excused": false, "graded": true, "late": false, "missing": false, "needs_grading": false, "with_feedback": true},
+   "plannable": {"id": 502, "title": "Quiz 3", "due_at": "2026-11-16T04:59:00Z"}},
+  {"context_type": "Course", "course_id": 102, "plannable_id": "503", "plannable_type": "assignment",
+   "planner_override": {"marked_complete": true}, "html_url": "/courses/102/assignments/503",
+   "submissions": false,
+   "plannable": {"id": 503, "title": "Reading response", "due_at": "2026-11-18T04:59:00Z"}},
+  {"context_type": "Course", "course_id": 101, "plannable_id": "504", "plannable_type": "discussion_topic",
+   "planner_override": null, "html_url": "/courses/101/discussion_topics/504",
+   "submissions": false,
+   "plannable": {"id": 504, "title": "Week 11 discussion", "todo_date": "2026-11-19T04:59:00Z"}},
+  {"context_type": "Course", "course_id": 101, "plannable_id": "505", "plannable_type": "assignment",
+   "planner_override": null, "html_url": "/courses/101/assignments/505",
+   "submissions": {"excused": false, "graded": false, "late": true, "missing": true, "needs_grading": false, "with_feedback": false},
+   "plannable": {"id": 505, "title": "Lab 3‮ <b>late</b>", "due_at": "2026-11-12T16:00:00Z"}}
+]

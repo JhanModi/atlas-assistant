@@ -24,3 +24,25 @@ port = 8765
 [briefing]
 hour = 7
 minute = 0
+
+# ---- Data sources (Phase 2). Credentials are NOT stored here: run `atlas auth ...` (saved in the OS keyring).
+[sources.routine]
+enabled = true
+path = "config/routine.yaml"      # copy config/routine.example.yaml and fill in your timetable
+
+[sources.canvas]
+enabled = false
+mode = "api"                      # "api" = personal access token (has submission status); "ics" = calendar feed
+base_url = "https://YOUR-SCHOOL.instructure.com"
+
+[sources.gcal]
+enabled = false
+mode = "api"                      # "api" = Google sign-in, read-only; "ics" = secret iCal address
+calendars = ["primary"]
+
+[sync]
+interval_minutes = 30
+past_days = 1                     # window: [today - past_days, today + future_days)
+future_days = 30
+announcement_days = 14
+max_backoff_hours = 6

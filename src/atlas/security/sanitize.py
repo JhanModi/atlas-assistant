@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 
 import nh3
@@ -45,6 +46,43 @@ def clean_output(text: str | None) -> str:
     text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
     text = redact_secrets(text)
     return text.strip()
+
+
+# Control characters plus zero-width and bidi overrides (used to hide or reorder text shown to people and models)
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f​-‏‪-‮⁦-⁩﻿]")
+_BLOCK_END = re.compile(r"(?i)<br\s*/?>|</p>|</div>|</li>|</h[1-6]>|</tr>")
+
+
+def _strip_markup(text: str) -> str:
+    text = nh3.clean(text, tags=set(), attributes={}, strip_comments=True)  # drops <script>/<style> content too
+    return html.unescape(text)
+
+
+def clean_title(text: str | None, limit: int = 200) -> str:
+    """Normalize a title from a source: no markup, control/bidi characters or newlines; bounded length."""
+    text = _CONTROL.sub("", _strip_markup(text or ""))
+    text = " ".join(text.split())
+    if len(text) > limit:
+        text = text[:limit].rstrip() + "…"
+    return text or "(no title)"
+
+
+def to_plain_text(text: str | None, limit: int = 5000) -> str | None:
+    """HTML or text written by others -> bounded plain text. Still untrusted: wrap it before a model sees it."""
+    if not text:
+        return None
+    text = _CONTROL.sub("", _strip_markup(_BLOCK_END.sub("\n", text)))
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    if len(text) > limit:
+        text = text[:limit].rstrip() + " …[truncated]"
+    return text or None
+
+
+def safe_error(text: str) -> str:
+    """Error text that is safe to store and show: no URLs (feed URLs are secrets) and no tokens."""
+    text = re.sub(r"https?://\S+", "[url]", str(text))
+    return redact_secrets(text)[:500]
 
 
 def wrap_untrusted(text: str | None, limit: int = 1500) -> str | None:

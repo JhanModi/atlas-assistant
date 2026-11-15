@@ -13,18 +13,31 @@ Atlas is a personal assistant for a university student. It reads Canvas, calenda
 | Metrics (7 KPIs) | [docs/04-metrics.md](docs/04-metrics.md) |
 | Decisions | [docs/adr/](docs/adr/) |
 
-## Status: Phase 1 (local foundation)
+## Status: Phase 2 (reliable daily briefing), in progress
 
-Done:
+Phase 2 so far ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
+- Connectors for your timetable (`routine.yaml`), Canvas (API token or calendar feed) and Google Calendar (read-only sign-in or secret iCal address).
+- Sync that never retries in a loop:
+  - an expired sign-in parks the source until you sign in again;
+  - other failures back off;
+  - a failed sync never deletes your data.
+- Invites written by other people are marked untrusted and taint the run.
+- `atlas auth` (credentials go to Windows Credential Manager) and `atlas sync [--dry-run]`.
+- The benchmark now pins its reference date and checks answers on all seven weekdays.
+- 142 tests.
+
+Next: the scheduler, deterministic alerts and the 7 AM briefing.
+
+Phase 1 (done):
 - A single Strands agent with 5 read tools over a SQLite store.
 - Security hooks: allowlist, taint tracking, approval gate, output sanitizer.
 - Split-latency metrics.
 - Local web chat and a metrics page.
 - The `atlas bench` model benchmark: golden set plus 8 end-to-end scenarios, including adversarial ones.
 - Default model **qwen3.5:4b**, chosen by benchmark: 8/8 scenarios, 100% intent, 98% slots, 2.6 s p50, fully on a 6 GB GPU ([ADR-0005](docs/adr/0005-default-model.md)).
-- 104 tests, including adversarial cases (see docs/03-security.md).
+- Adversarial tests (see docs/03-security.md).
 
-Real data sources start in Phase 2. Until then, `atlas seed-demo` loads fictional data.
+`atlas seed-demo` loads fictional data for trying things out. Remove it with `atlas clear-demo` before connecting your real sources.
 
 ## Setup (Windows)
 
@@ -59,6 +72,47 @@ Real data sources start in Phase 2. Until then, `atlas seed-demo` loads fictiona
 ```
 Then open http://127.0.0.1:8765. **Chat** shows split timings and 👍/👎 on every answer; **Metrics** shows the KPI baseline.
 
+## Connect your data sources
+
+Credentials never go in files. You type them into `atlas auth`, which checks each one and stores it in Windows Credential Manager. `atlas auth status` shows only whether each credential is present or absent.
+
+1. **Settings:** copy `config/settings.example.toml` to `config/settings.toml`. Then edit the `[sources.*]` sections: `enabled = true`, the `mode`, and your Canvas `base_url`.
+2. **Timetable:** copy `config/routine.example.yaml` to `config/routine.yaml` and enter your real lectures, labs and office hours. Both files are gitignored.
+3. **Canvas, API mode** (recommended: it includes submission status):
+   - In Canvas, go to Account → Settings → **+ New Access Token** and set an expiry date.
+   - Then run:
+   ```bash
+   .venv/Scripts/atlas auth canvas
+   ```
+   - If your school doesn't offer access tokens, use the calendar feed instead. In Canvas, go to Calendar → **Calendar Feed**, copy the link, set `mode = "ics"`, and run:
+   ```bash
+   .venv/Scripts/atlas auth canvas --ics
+   ```
+4. **Google Calendar, API mode:**
+   - Create a free Google Cloud project at https://console.cloud.google.com/.
+   - Enable the **Google Calendar API**.
+   - On the OAuth consent screen, choose External, add yourself as a test user, then **Publish app → In production**. A "Testing" app's sign-in expires every 7 days.
+   - Create an OAuth client of type **Desktop app** and download its JSON.
+   - Run:
+   ```bash
+   .venv/Scripts/atlas auth gcal --client-file path/to/client_secret.json
+   ```
+   - Your browser opens and you sign in. Google will warn that the app is unverified, because it's your own personal project. Choose "Continue".
+   - Simpler alternative: Google Calendar → Settings → your calendar → **Secret address in iCal format**. Set `mode = "ics"`, then run:
+   ```bash
+   .venv/Scripts/atlas auth gcal --ics
+   ```
+5. **Check and sync:**
+   ```bash
+   .venv/Scripts/atlas sync --dry-run
+   ```
+   ```bash
+   .venv/Scripts/atlas sync
+   ```
+   ```bash
+   .venv/Scripts/atlas auth status
+   ```
+
 ## Phase 1 gate: benchmark the models
 
 ```bash
@@ -73,6 +127,9 @@ For each model, the benchmark measures:
 - split latency
 - a ~3k-token email with an embedded prompt injection
 - a 3-step request
+- a weekday sweep: day questions asked as if it were each day of the week, checking that each answer names everything on that day
+
+Runs use a fixed reference date by default (`--now 2026-11-13T09:00:00`), so results from different days are comparable. The model's answers can depend on the weekday in its prompt, which is what the sweep is for. Pass `--now live` to use the real clock.
 
 The suggested default is the most **correct** model that runs well on the GPU. Speed only breaks near-ties. Reports go to `evals/reports/`. Record the chosen default in a new ADR using `docs/adr/0000-template.md`. Use `--quick` for a faster, smaller run.
 

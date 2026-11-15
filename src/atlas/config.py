@@ -54,12 +54,45 @@ class BriefingSettings(BaseModel):
     minute: int = 0
 
 
+class CanvasSettings(BaseModel):
+    enabled: bool = False
+    mode: Literal["api", "ics"] = "api"  # api = personal token (has submission status); ics = calendar feed fallback
+    base_url: str = ""  # e.g. "https://YOUR-SCHOOL.instructure.com" (https only)
+
+
+class GcalSettings(BaseModel):
+    enabled: bool = False
+    mode: Literal["api", "ics"] = "api"  # api = OAuth (read-only scope); ics = "secret address in iCal format"
+    calendars: list[str] = ["primary"]
+
+
+class RoutineSettings(BaseModel):
+    enabled: bool = True
+    path: str = "config/routine.yaml"
+
+
+class SourcesSettings(BaseModel):
+    canvas: CanvasSettings = CanvasSettings()
+    gcal: GcalSettings = GcalSettings()
+    routine: RoutineSettings = RoutineSettings()
+
+
+class SyncSettings(BaseModel):
+    interval_minutes: int = 30
+    past_days: int = 1  # sync window: [now - past_days, now + future_days)
+    future_days: int = 30
+    announcement_days: int = 14
+    max_backoff_hours: int = 6
+
+
 class Settings(BaseSettings):
     timezone: str = "America/New_York"
     data_dir: str = "data"
     model: ModelSettings = ModelSettings()
     web: WebSettings = WebSettings()
     briefing: BriefingSettings = BriefingSettings()
+    sources: SourcesSettings = SourcesSettings()
+    sync: SyncSettings = SyncSettings()
 
     model_config = SettingsConfigDict(env_prefix="ATLAS_", env_nested_delimiter="__", extra="ignore")
 

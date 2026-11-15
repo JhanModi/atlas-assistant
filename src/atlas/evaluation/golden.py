@@ -97,4 +97,10 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
              "got": r.tools_called, "args": r.first_args, "status": r.status}
             for r in results if not r.intent_ok
         ],
+        # Right tool, wrong arguments (wrong-tool cases already appear under misses)
+        "slot_misses": [
+            {"id": r.case["id"], "utterance": r.case["utterance"], "expected_args": r.case.get("args"),
+             "got_args": r.first_args, "matched": f"{r.slots_matched}/{r.slots_expected}"}
+            for r in results if r.intent_ok and r.slots_matched < r.slots_expected
+        ],
     }
