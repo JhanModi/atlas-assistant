@@ -13,9 +13,23 @@ Atlas is a personal assistant for a university student. It reads Canvas, calenda
 | Metrics (7 KPIs) | [docs/04-metrics.md](docs/04-metrics.md) |
 | Decisions | [docs/adr/](docs/adr/) |
 
-## Status: Phase 2 (reliable daily briefing), in progress
+## Status: Phase 2 (reliable daily briefing): built, gate pending
 
-Phase 2 so far ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
+The code for Phase 2 is done. The gate is 7 days in a row of briefings that match your real Canvas and calendar, with nothing missed, and it needs your accounts connected (see below).
+
+Daily briefing and alerts ([ADR-0007](docs/adr/0007-daily-briefing-and-alerts.md)):
+- **The 7 AM briefing** is built by code from your synced data, never written by the model. It covers:
+  - today's classes and events;
+  - work due within 48 hours and later in the week, skipping anything already submitted;
+  - missing submissions;
+  - clashes over the next 14 days;
+  - new announcements;
+  - a data-health section that names stale sources.
+- **Never missed, never doubled.** If the laptop was asleep or Atlas wasn't running at 7:00, the briefing arrives when Atlas next runs, marked as caught up.
+- **Windows notifications only for urgent items:** due within 24 h, a missing submission, a clash today, or an expired sign-in. They're capped at 5 a day. Text from other people's invites never appears in a notification.
+- The briefing sits at the top of the Chat page. You mark each day "accurate" or "something's wrong" and rate each alert. The Metrics page tracks the 7-day gate streak and alert precision.
+
+Sync ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
 - Connectors for your timetable (`routine.yaml`), Canvas (API token or calendar feed) and Google Calendar (read-only sign-in or secret iCal address).
 - Sync that never retries in a loop:
   - an expired sign-in parks the source until you sign in again;
@@ -24,9 +38,7 @@ Phase 2 so far ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
 - Invites written by other people are marked untrusted and taint the run.
 - `atlas auth` (credentials go to Windows Credential Manager) and `atlas sync [--dry-run]`.
 - The benchmark now pins its reference date and checks answers on all seven weekdays.
-- 142 tests.
-
-Next: the scheduler, deterministic alerts and the 7 AM briefing.
+- 162 tests.
 
 Phase 1 (done):
 - A single Strands agent with 5 read tools over a SQLite store.
@@ -112,6 +124,32 @@ Credentials never go in files. You type them into `atlas auth`, which checks eac
    ```bash
    .venv/Scripts/atlas auth status
    ```
+
+## Daily briefing
+
+While `atlas serve` is running, Atlas syncs every 30 minutes and makes the briefing at 7:00. If 7:00 was missed, it makes it as soon as Atlas runs. To see one now:
+```bash
+.venv/Scripts/atlas brief
+```
+
+**Optional: a briefing even when `atlas serve` isn't running.** Create a Windows scheduled task yourself in PowerShell. Replace the path with your project folder. "Start when available" makes Windows run it at wake if 7:00 was missed.
+```powershell
+$dir = "C:\path\to\Personal-Assistant"
+$action = New-ScheduledTaskAction -Execute "$dir\.venv\Scripts\atlas.exe" -Argument "brief --if-due --notify" -WorkingDirectory $dir
+Register-ScheduledTask -TaskName "Atlas daily briefing" -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At 7:00am) -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable)
+```
+`--if-due` makes at most one daily briefing, so this never doubles up with `atlas serve`. Remove the task with `Unregister-ScheduledTask -TaskName "Atlas daily briefing"`.
+
+**The Phase 2 gate:** each morning, compare the briefing with Canvas and your calendar. Then click **Yes, accurate** or **Something's wrong** on the Chat page, or record it from the terminal:
+```bash
+.venv/Scripts/atlas brief --verdict accurate
+```
+The Metrics page shows the streak. Phase 2 passes at 7 accurate days in a row with nothing missed.
+
+**Try it on demo data first**, without touching your real data. In PowerShell, point Atlas at a separate, gitignored data folder:
+```powershell
+$env:ATLAS_DATA_DIR = "data/preview-demo"; .venv/Scripts/atlas seed-demo; .venv/Scripts/atlas brief --if-due --no-sync; .venv/Scripts/atlas serve --no-scheduler
+```
 
 ## Phase 1 gate: benchmark the models
 

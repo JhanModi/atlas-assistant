@@ -13,6 +13,8 @@
 | Token sent to the wrong host | A pagination `Link` header points to another domain | Canvas token is only sent to the configured https host; foreign links are refused |
 | Feed URL leaks | A Canvas / Google ICS URL (the URL *is* the credential) ends up in logs or error messages | Feed URLs live in the keyring; stored errors have every URL removed |
 | Tracking pixels in source text | An announcement embeds `<img src="https://evil…">` | Bodies are converted to plain text at ingest; images never stored or loaded |
+| Phishing via notification | A stranger's invite titled "Your NEU password expires, verify at …" shows up as an Atlas toast | Toast text uses counts and trusted titles only; others' invites appear as "an event from someone else's invite". The dashboard labels them and never links them |
+| Notification flood | A sync glitch raises dozens of alerts | Alerts are deduplicated by the DB; only urgent ones are toasted, capped at 5 a day plus one summary |
 
 ## Controls
 
@@ -69,6 +71,9 @@
 | Token leaks to another host | `test_canvas_refuses_to_follow_pagination_to_another_host`, `test_canvas_requires_https_base_url`, `test_feed_refuses_redirect_to_http` | n/a |
 | Secret feed URL in errors | `test_feed_errors_never_leak_the_secret_url`, `test_safe_error_strips_urls_and_tokens`, `test_backoff_is_capped` | n/a |
 | Forged OAuth redirect | `test_consent_flow_rejects_forged_state` (no code exchange), `test_consent_flow_exchanges_code_with_pkce`, `test_consent_flow_requires_calendar_scope` | n/a |
+
+| Phishing text in a notification | `test_invite_titles_never_reach_a_toast`, `test_toast_points_at_whats_next_not_whats_over` | n/a |
+| Notification flood | `test_toasts_are_capped_per_day`, `test_due_within_24h_toasts_once` | n/a |
 
 Mutation-checked on 2026-11-14: each of four safety behaviours was deliberately broken, and its test failed every time. The four were item removal, invite taint, the same-host token rule, and parking after a failed sign-in.
 

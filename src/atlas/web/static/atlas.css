@@ -81,3 +81,23 @@ th { font-size: 12px; color: var(--muted); font-weight: 500; }
 .nps input { width: 80px; margin-left: 6px; }
 code { font-size: 13px; }
 @media (max-width: 600px) { .msg { max-width: 100%; } .top { gap: 10px; } }
+
+/* Daily briefing (first message on the chat page) */
+.msg.briefing { white-space: normal; max-width: 100%; width: 100%; box-sizing: border-box; }
+.briefing .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.briefing .summary { margin: 4px 0 2px; font-weight: 550; }
+.briefing h3 { font-size: 13px; margin: 12px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.briefing ul { margin: 0; padding-left: 18px; }
+.briefing li { margin: 2px 0; }
+.briefing a.title { color: var(--accent); }
+.briefing .when { font-variant-numeric: tabular-nums; }
+.briefing .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--muted); }
+.briefing .badge.bad { border-color: var(--bad); color: var(--bad); }
+.briefing .urgent { font-weight: 600; }
+.briefing .banner { margin: 8px 0; }
+.briefing details > summary { cursor: pointer; margin-top: 6px; }
+.briefing .gate { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.briefing .gate p { width: 100%; margin: 0; }
+.briefing .wrong { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 100%; }
+.briefing .wrong input[type=number] { width: 64px; }
+.briefing .wrong input:not([type]) { flex: 1; min-width: 160px; }

@@ -3,6 +3,7 @@
 <div id="banner" class="banner" hidden></div>
 <section class="chat">
   <div id="log" class="log" aria-live="polite">
+    <div id="briefing" class="msg atlas briefing" hidden></div>
     <div class="msg atlas intro">
       <p>Hi! Ask me about your lectures, deadlines, conflicts or routine. For example:</p>
       <div class="chips">
@@ -20,4 +21,4 @@
   </form>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/chat.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/chat.js"></script><script src="/static/briefing.js"></script>{% endblock %}

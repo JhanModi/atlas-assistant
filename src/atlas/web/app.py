@@ -1,10 +1,12 @@
-"""Local dashboard (bound to 127.0.0.1 by `atlas serve`). Phase 1: Chat + Metrics."""
+"""Local dashboard (bound to 127.0.0.1 by `atlas serve`): Chat (with today's briefing on top) + Metrics.
+When `atlas serve` passes a scheduler, it runs for the lifetime of the app (sync + daily briefing)."""
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -13,11 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine
+from sqlmodel import col, select
 
+from atlas import timeutil
 from atlas.agent import Assistant
 from atlas.config import Settings, get_settings
 from atlas.metrics import compute
-from atlas.store import Approval, Feedback, Interaction, NpsSurvey, get_engine, session_scope
+from atlas.proactive import briefing
+from atlas.store import Alert, Approval, Feedback, Interaction, NpsSurvey, get_engine, session_scope
 
 HERE = Path(__file__).parent
 
@@ -42,6 +47,27 @@ class NpsIn(BaseModel):
     score: int = Field(ge=0, le=10)
 
 
+class VerdictIn(BaseModel):
+    verdict: Literal["accurate", "inaccurate"]
+    missed: int | None = Field(default=None, ge=0, le=100)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class AlertFeedbackIn(BaseModel):
+    useful: bool
+
+
+def briefing_json(engine: Engine, b) -> dict[str, Any] | None:
+    if b is None:
+        return None
+    ids = [a["id"] for a in b.content.get("alerts", [])]
+    with session_scope(engine) as db:
+        rated = {a.id: a.feedback for a in db.exec(select(Alert).where(col(Alert.id).in_(ids))).all()} if ids else {}
+    return {"id": b.id, "day": b.day, "trigger": b.trigger, "daily": b.daily_key is not None,
+            "created_at": b.created_at, "content": b.content, "verdict": b.verdict, "missed_items": b.missed_items,
+            "verdict_note": b.verdict_note, "alert_feedback": rated}
+
+
 def ollama_status(settings: Settings) -> dict[str, Any]:
     try:
         r = httpx.get(f"{settings.model.host}/api/tags", timeout=2.0)
@@ -52,10 +78,22 @@ def ollama_status(settings: Settings) -> dict[str, Any]:
         return {"reachable": False, "models": [], "model_ready": False, "error": type(exc).__name__}
 
 
-def create_app(engine: Engine | None = None, assistant: Assistant | None = None, settings: Settings | None = None) -> FastAPI:
+def create_app(engine: Engine | None = None, assistant: Assistant | None = None, settings: Settings | None = None,
+               scheduler: Any = None) -> FastAPI:
     settings = settings or get_settings()
     engine = engine or get_engine()
-    app = FastAPI(title="Atlas", docs_url=None, redoc_url=None)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        if scheduler is not None:
+            scheduler.start()
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                scheduler.shutdown()
+
+    app = FastAPI(title="Atlas", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
     state: dict[str, Assistant | None] = {"assistant": assistant}
@@ -76,7 +114,38 @@ def create_app(engine: Engine | None = None, assistant: Assistant | None = None,
 
     @app.get("/api/health")
     def health():
-        return {"model_id": settings.model.model_id, "ollama": ollama_status(settings)}
+        jobs = {j.id: timeutil.fmt_local(j.next_run_time) for j in scheduler.jobs()} if scheduler else {}
+        return {"model_id": settings.model.model_id, "ollama": ollama_status(settings),
+                "scheduler": {"running": bool(jobs), "next_runs": jobs,
+                              "status": scheduler.status if scheduler else {}}}
+
+    @app.get("/api/briefing")
+    def get_briefing():
+        return {"briefing": briefing_json(engine, briefing.latest(engine, timeutil.to_local(timeutil.now()).date().isoformat())
+                                          or briefing.latest(engine))}
+
+    @app.post("/api/briefing")
+    def make_briefing():  # on demand, from stored data (the scheduler keeps it synced)
+        made = briefing.generate(engine, settings, timeutil.now(), trigger="manual", daily=False)
+        return {"briefing": briefing_json(engine, made)}
+
+    @app.post("/api/briefing/{briefing_id}/verdict")
+    def verdict(briefing_id: str, body: VerdictIn):
+        b = briefing.set_verdict(engine, briefing_id, body.verdict, body.missed, body.note, timeutil.now())
+        if b is None:
+            raise HTTPException(404, "unknown briefing")
+        return {"ok": True, "verdict": b.verdict}
+
+    @app.post("/api/alerts/{alert_id}/feedback")
+    def alert_feedback(alert_id: str, body: AlertFeedbackIn):
+        with session_scope(engine) as db:
+            alert = db.get(Alert, alert_id)
+            if alert is None:
+                raise HTTPException(404, "unknown alert")
+            alert.feedback = "useful" if body.useful else "not_useful"
+            db.add(alert)
+            db.commit()
+        return {"ok": True}
 
     @app.post("/api/chat")
     def chat(body: ChatIn):  # sync def -> runs in FastAPI's threadpool; the agent call is blocking

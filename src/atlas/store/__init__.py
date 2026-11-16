@@ -2,6 +2,7 @@ from atlas.store.db import get_engine, make_engine, session_scope
 from atlas.store.models import (
     Alert,
     Approval,
+    Briefing,
     Feedback,
     Interaction,
     Item,
@@ -14,6 +15,7 @@ from atlas.store.models import (
 __all__ = [
     "Alert",
     "Approval",
+    "Briefing",
     "Feedback",
     "Interaction",
     "Item",

@@ -48,12 +48,16 @@ Reported as p50 and p95 per context. Aspirational: read answers p50 < 3 s.
 (clarified + failed + escalated) / all interactions. Aspirational < 10%.
 
 ### 6. Useful proactivity (replaces "% proactive")
-- **Alert precision** = alerts marked useful or acted on / alerts sent. Aspirational ≥70%.
-- **Deadline recall** = deadlines that got an alert before they were due / all deadlines. Target **100%**.
-- **Volume cap:** at most 5 non-urgent alerts per day, so the KPI can't be gamed by spamming.
+- **Alert precision** = alerts rated useful (or acted on) / alerts rated. An alert counts as delivered when it was shown as a toast or in a briefing (`Alert.channel`). It's rated with 👍/👎 in the briefing card. Aspirational ≥70%.
+- **Deadline recall** = deadlines that got an alert before they were due / all deadlines. Target **100%**. Phase 2 measures it through the briefing check: "items missed" must be 0.
+- **Volume cap:** only urgent alerts become Windows toasts, at most 5 a day; extras fold into one summary toast. Non-urgent alerts appear in the next briefing. So the KPI can't be gamed by spamming (ADR-0007).
+- **Daily briefing** (Phase 2 gate), reported in the `briefings` KPI block and on the Metrics page:
+  - delivered, split into on time (within 15 min of the scheduled time) and caught up (the scheduled run was missed);
+  - checked, accurate, items missed, days with stale data;
+  - the **streak**: consecutive days checked accurate with 0 missed. Today not being checked yet doesn't break it. **The gate passes at a 7-day streak.**
 
 ### 7. Time saved
-For each completed interaction, add the minutes from `config/time_baselines.yaml` for the tasks its tools map to. Add the value of each useful alert. Subtract an estimated 1 minute for each 👎 (correction time). Reported as hours per week.
+For each completed interaction, add the minutes from `config/time_baselines.yaml` for the tasks its tools map to. Add the value of each useful alert, and the `morning_check` minutes (15) for each daily briefing not marked inaccurate. Subtract an estimated 1 minute for each 👎 (correction time). Reported as hours per week.
 
 ### 8. CSAT / NPS
 - **CSAT** = 👍 / (👍 + 👎) plus an optional 1–5 score per answer. Aspirational ≥ 4.2/5 (equivalent: ≥84% 👍).

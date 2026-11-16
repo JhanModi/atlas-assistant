@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv/Scripts/atlas.exe",
       "runtimeArgs": ["serve"],
       "port": 8765
+    },
+    {
+      "name": "atlas-demo",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-c", "import os; os.environ['ATLAS_DATA_DIR']='data/preview-demo'; from atlas.cli import main; main(['serve', '--port', '8766', '--no-scheduler'])"],
+      "port": 8766
     }
   ]
 }

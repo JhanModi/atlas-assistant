@@ -8,6 +8,7 @@
   atlas kpis [--days 7]         print the KPI baseline
   atlas auth canvas|gcal|status store credentials you enter (OS keyring); show source health
   atlas sync [--source S] [--dry-run]   sync routine / Canvas / Google Calendar into the store
+  atlas brief [--if-due] [--verdict accurate|inaccurate]   daily briefing; record the Phase 2 gate check
 """
 
 from __future__ import annotations
@@ -130,6 +131,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     from atlas.config import get_settings
+    from atlas.proactive.notify import ToastNotifier
+    from atlas.proactive.scheduler import AtlasScheduler
+    from atlas.store import get_engine
     from atlas.web.app import create_app
 
     s = get_settings()
@@ -137,8 +141,52 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if host not in ("127.0.0.1", "localhost", "::1"):
         print(f"Refusing to bind to {host}: the dashboard has no login. Use 127.0.0.1.")
         return 2
-    print(f"Atlas dashboard: http://{host}:{args.port or s.web.port}")
-    uvicorn.run(create_app(), host=host, port=args.port or s.web.port, log_level="warning")
+    url = f"http://{host}:{args.port or s.web.port}"
+    scheduler = None if args.no_scheduler else AtlasScheduler(get_engine(), s, ToastNotifier(), url)
+    print(f"Atlas dashboard: {url}")
+    if scheduler:
+        print(f"Background jobs: sync every {s.sync.interval_minutes} min; daily briefing at "
+              f"{s.briefing.hour:02d}:{s.briefing.minute:02d} (catches up after sleep).")
+    uvicorn.run(create_app(scheduler=scheduler), host=host, port=args.port or s.web.port, log_level="warning")
+    return 0
+
+
+def cmd_brief(args: argparse.Namespace) -> int:
+    from atlas import timeutil
+    from atlas.config import get_settings
+    from atlas.proactive import briefing
+    from atlas.proactive.notify import NullNotifier, ToastNotifier
+    from atlas.proactive.scheduler import AtlasScheduler
+    from atlas.store import get_engine
+
+    s, engine, now = get_settings(), get_engine(), timeutil.now()
+    if args.verdict:
+        target = briefing.latest(engine, timeutil.to_local(now).date().isoformat())
+        if target is None:
+            print("No briefing for today yet. Run `atlas brief` first.")
+            return 1
+        briefing.set_verdict(engine, target.id, args.verdict, args.missed, args.note, now)
+        print(f"Recorded: today's briefing was {args.verdict}"
+              + (f", {args.missed} item(s) missed or wrong" if args.missed else "") + ".")
+        return 0
+
+    url = f"http://{s.web.host}:{s.web.port}"
+    notifier = ToastNotifier() if args.notify else NullNotifier()
+    runner = AtlasScheduler(engine, s, notifier, url)
+    if args.if_due:  # for Windows Task Scheduler: idempotent, makes at most one briefing per day
+        made = briefing.ensure_daily(engine, s, now, notifier, url,
+                                     sync=None if args.no_sync else (lambda t: runner.sync_all(t, skip_fresh=True)))
+        if made is None:
+            print("Not due yet, or today's briefing already exists.")
+            return 0
+        print(briefing.render_text(made.content))
+        return 0
+    if not args.no_sync:
+        for report in runner.sync_all(now, skip_fresh=True):
+            print(report.line())
+        print()
+    made = briefing.generate(engine, s, now, trigger="manual", daily=False, notifier=None)
+    print(briefing.render_text(made.content))
     return 0
 
 
@@ -355,7 +403,17 @@ def main(argv: list[str] | None = None) -> int:
     a.set_defaults(func=cmd_ask)
     sv = sub.add_parser("serve", help="run the local dashboard")
     sv.add_argument("--port", type=int, default=None)
+    sv.add_argument("--no-scheduler", action="store_true", help="don't run background sync / briefing jobs")
     sv.set_defaults(func=cmd_serve)
+    br = sub.add_parser("brief", help="show a briefing now, or record whether today's was accurate")
+    br.add_argument("--if-due", action="store_true", help="make today's daily briefing only if due and missing")
+    br.add_argument("--no-sync", action="store_true", help="use stored data; don't sync first")
+    br.add_argument("--notify", action="store_true", help="also show Windows notifications")
+    br.add_argument("--verdict", choices=["accurate", "inaccurate"],
+                    help="Phase 2 gate: did today's briefing match Canvas and your calendar?")
+    br.add_argument("--missed", type=int, default=None, help="with --verdict: how many items it missed or got wrong")
+    br.add_argument("--note", default=None, help="with --verdict: what was wrong")
+    br.set_defaults(func=cmd_brief)
     b = sub.add_parser("bench", help="benchmark local models")
     b.add_argument("--models", nargs="+", default=["qwen3.5:4b", "qwen3:8b", "qwen3:4b"])  # slowest last
     b.add_argument("--ctx", nargs="+", type=int, default=[4096, 8192, 16384], help="num_ctx values to probe for VRAM")

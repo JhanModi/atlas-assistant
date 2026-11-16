@@ -13,8 +13,16 @@
     <div class="tile"><div class="label">Read answers p50</div><div class="value">{{ ms(k.read_latency_ms.e2e_ms.p50) }}</div><div class="target">goal &lt; {{ ms(k.targets.read_p50_ms) }}</div></div>
     <div class="tile"><div class="label">👍 rate</div><div class="value">{{ pct(k.csat.thumbs_up_rate) }}</div><div class="target">{{ k.csat.responses }} ratings</div></div>
     <div class="tile"><div class="label">Time saved</div><div class="value">{{ k.time_saved_hours }} h</div><div class="target">estimate, config/time_baselines.yaml</div></div>
-    <div class="tile"><div class="label">Useful alerts</div><div class="value">{{ pct(k.alerts.precision) }}</div><div class="target">{{ k.alerts.sent }} sent · Phase 2</div></div>
+    <div class="tile"><div class="label">Useful alerts</div><div class="value">{{ pct(k.alerts.precision) }}</div><div class="target">{{ k.alerts.rated }} rated of {{ k.alerts.sent }} · goal ≥ {{ pct(k.targets.alert_precision) }}</div></div>
+    <div class="tile"><div class="label">Phase 2 gate: accurate days in a row</div><div class="value">{{ k.briefings.streak }} / {{ k.briefings.gate_days }}</div><div class="target">verified briefings with nothing missed</div></div>
   </div>
+
+  <h2>Daily briefings</h2>
+  <table>
+    <thead><tr><th>Delivered</th><th>On time</th><th>Caught up (scheduled run missed)</th><th>Checked</th><th>Accurate</th><th>Items missed</th><th>Days with stale data</th></tr></thead>
+    <tbody><tr><td>{{ k.briefings.daily }}</td><td>{{ k.briefings.on_time }}</td><td>{{ k.briefings.catch_up }}</td><td>{{ k.briefings.verified }}</td>
+      <td>{{ k.briefings.accurate }} ({{ pct(k.briefings.accuracy) }})</td><td>{{ k.briefings.missed_items }}</td><td>{{ k.briefings.stale_days }}</td></tr></tbody>
+  </table>
 
   <h2>Latency, split</h2>
   <table>

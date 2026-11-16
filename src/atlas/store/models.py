@@ -142,8 +142,27 @@ class Alert(SQLModel, table=True):
     urgent: bool = False
     created_at: datetime = _dt(nullable=False, default_now=True)
     notified_at: Optional[datetime] = _dt()
+    channel: Optional[str] = None  # toast | briefing (how it reached the user)
     feedback: Optional[str] = None  # useful | not_useful
     acted: bool = False
+
+
+class Briefing(SQLModel, table=True):
+    """A generated briefing. Daily ones have daily_key = local date, which the DB keeps unique, so the
+    scheduler, a catch-up after sleep and `atlas brief --if-due` can never produce two for one day."""
+
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex, primary_key=True)
+    day: str = Field(index=True)  # local date, YYYY-MM-DD
+    daily_key: Optional[str] = Field(default=None, unique=True)  # set for the one daily briefing; None for manual
+    trigger: str  # scheduled | catch_up | manual
+    created_at: datetime = _dt(nullable=False, index=True, default_now=True)
+    content: dict = _json(dict)
+    stale_sources: list = _json(list)
+    # Phase 2 gate: did it match a manual check of Canvas and the calendar?
+    verdict: Optional[str] = None  # accurate | inaccurate
+    missed_items: Optional[int] = None
+    verdict_note: Optional[str] = None
+    verdict_at: Optional[datetime] = _dt()
 
 
 class Feedback(SQLModel, table=True):
