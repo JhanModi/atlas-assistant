@@ -135,13 +135,26 @@ def expand(raw: dict, start: datetime, end: datetime, zone) -> list[Item]:
     return items
 
 
+EXAMPLE_WARNING = ("config/routine.yaml is still the example timetable (fictional classes), so it was ignored. "
+                   "Replace it with your real lectures, labs and office hours.")
+_DEFAULT = object()
+
+
 class RoutineConnector:
     source = SOURCE
 
-    def __init__(self, path: str | Path, sync: SyncSettings) -> None:
+    def __init__(self, path: str | Path, sync: SyncSettings, example_path: Path | None | object = _DEFAULT) -> None:
         p = Path(path)
         self.path = p if p.is_absolute() else project_root() / p
         self.sync = sync
+        self.example_path = project_root() / "config" / "routine.example.yaml" if example_path is _DEFAULT else example_path
+
+    def _is_example(self, raw: dict) -> bool:
+        """An unedited copy of the example must never be presented as the user's real schedule."""
+        if not self.example_path or not Path(self.example_path).exists():
+            return False
+        with open(self.example_path, encoding="utf-8") as f:
+            return raw == (yaml.safe_load(f) or {})
 
     def fetch(self, now: datetime) -> FetchResult:
         if not self.path.exists():
@@ -152,5 +165,7 @@ class RoutineConnector:
         if not isinstance(raw, dict):
             raise ValueError("routine.yaml must be a mapping with semester / recurring / one_off")
         start, end = window(now, self.sync)
-        return FetchResult(expand(raw, start, end, timeutil.tz()), [Coverage("start", start, end),
-                                                                     Coverage("due", start, end)])
+        coverage = [Coverage("start", start, end), Coverage("due", start, end)]
+        if self._is_example(raw):  # also removes example sessions an earlier sync stored
+            return FetchResult([], coverage, [EXAMPLE_WARNING])
+        return FetchResult(expand(raw, start, end, timeutil.tz()), coverage)

@@ -31,6 +31,8 @@ Daily briefing and alerts ([ADR-0007](docs/adr/0007-daily-briefing-and-alerts.md
 
 Sync ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
 - Connectors for your timetable (`routine.yaml`), Canvas (API token or calendar feed) and Google Calendar (read-only sign-in or secret iCal address).
+- **Canvas is verified on real data** (2026-11-17): due times and submission statuses match the raw API exactly. Course codes like `CS5100.17342.202710` are stored as `CS 5100`. "Redo" requests count as open work. The Canvas client can only send GET requests.
+- An unedited copy of the example timetable is ignored, so fictional classes never appear in a briefing.
 - Sync that never retries in a loop:
   - an expired sign-in parks the source until you sign in again;
   - other failures back off;
@@ -38,7 +40,7 @@ Sync ([ADR-0006](docs/adr/0006-sync-layer-design.md)):
 - Invites written by other people are marked untrusted and taint the run.
 - `atlas auth` (credentials go to Windows Credential Manager) and `atlas sync [--dry-run]`.
 - The benchmark now pins its reference date and checks answers on all seven weekdays.
-- 162 tests.
+- 169 tests. They never read your own `config/settings.toml` or `config/routine.yaml`.
 
 Phase 1 (done):
 - A single Strands agent with 5 read tools over a SQLite store.

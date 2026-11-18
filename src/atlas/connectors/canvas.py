@@ -11,6 +11,7 @@ The token is sent only to the configured https base URL: pagination links to oth
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -37,11 +38,31 @@ def normalize_base_url(url: str) -> str:
     return f"https://{parts.netloc}"
 
 
+def read_only(request: httpx.Request) -> None:
+    """Enforced, not just conventional: a personal Canvas token can do anything you can (submit, post,
+    delete), so the client refuses every method except GET before it leaves the machine."""
+    if request.method != "GET":
+        raise SourceError(f"blocked a {request.method} request: Atlas only reads from Canvas")
+
+
 def _parse_dt(value: Any) -> datetime | None:
     if not value:
         return None
     dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     return dt if dt.tzinfo else None  # Canvas always sends UTC; refuse to guess a zone
+
+
+_COURSE_CODE = re.compile(r"^([A-Za-z]{2,5})\s*[-.]?\s*(\d{4})(?!\d)")
+
+
+def course_label(course: dict) -> str:
+    """Short, matchable course name. Northeastern codes look like "CS5100.17342.202710" (subject+number,
+    CRN, term): keep "CS 5100", which is how people (and the timetable) write it. Anything that doesn't
+    look like a subject+number code falls back to the course name, e.g. "Master's ... Orientation"."""
+    code = str(course.get("course_code") or "").strip()
+    if m := _COURSE_CODE.match(code) or _COURSE_CODE.match(str(course.get("name") or "")):
+        return f"{m.group(1).upper()} {m.group(2)}"
+    return clean_title(str(course.get("name") or code or course.get("id")), 60)
 
 
 def submission_status(p: dict) -> str | None:
@@ -50,6 +71,8 @@ def submission_status(p: dict) -> str | None:
         return "done"
     sub = p.get("submissions")
     if isinstance(sub, dict):
+        if sub.get("redo_request"):  # the instructor asked for a resubmission: open again, whatever else is set
+            return "redo_requested"
         if sub.get("excused"):
             return "excused"
         if sub.get("graded"):
@@ -116,10 +139,10 @@ class CanvasConnector:
         start, end = window(now, self.sync)
         ann_start, ann_end = now - timedelta(days=self.sync.announcement_days), now + timedelta(days=1)
         warnings: list[str] = []
-        with self.client_factory(base_url=self.base, headers={"Authorization": f"Bearer {token}"}) as client:
+        with self.client_factory(base_url=self.base, headers={"Authorization": f"Bearer {token}"},
+                                 event_hooks={"request": [read_only]}) as client:
             courses = self._paged(client, "/api/v1/courses", {"enrollment_state": "active", "per_page": 100})
-            names = {c["id"]: clean_title(str(c.get("course_code") or c.get("name") or c["id"]))
-                     for c in courses if "id" in c}
+            names = {c["id"]: course_label(c) for c in courses if "id" in c}
             planner = self._paged(client, "/api/v1/planner/items",
                                   {"start_date": start.isoformat(), "end_date": end.isoformat(), "per_page": 100})
             items = [i for p in planner if (i := self._planner_item(p, names))]

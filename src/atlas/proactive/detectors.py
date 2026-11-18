@@ -137,7 +137,10 @@ def source_health(engine: Engine, settings: Settings, now: datetime) -> list[dic
             message = "no successful sync recently"
         else:
             message = "ok"
+        warning = st.last_error.removeprefix("warning: ") if st and st.status == "ok" and \
+            (st.last_error or "").startswith("warning:") else None
         rows.append({"source": name, "status": st.status if st else "never", "stale": stale, "message": message,
+                     "warning": warning,
                      "last_success": timeutil.fmt_local(st.last_success_at) if st and st.last_success_at else None,
                      "mode": getattr(cfg, "mode", "file")})
     return rows

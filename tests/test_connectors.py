@@ -50,9 +50,24 @@ def local(dt):
 
 @pytest.fixture
 def routine_file(tmp_path):
+    """The example timetable, edited slightly (an unedited copy is deliberately ignored)."""
+    p = tmp_path / "routine.yaml"
+    text = (ROOT / "config" / "routine.example.yaml").read_text(encoding="utf-8")
+    p.write_text(text.replace('name: "Fall 2026"', 'name: "Fall 2026 (test copy)"'), encoding="utf-8")
+    return p
+
+
+def test_unedited_example_timetable_is_ignored_and_its_sessions_removed(engine, tmp_path):
     p = tmp_path / "routine.yaml"
     shutil.copy(ROOT / "config" / "routine.example.yaml", p)
-    return p
+    edited = tmp_path / "edited.yaml"
+    edited.write_text(p.read_text(encoding="utf-8").replace("Fall 2026", "Fall 2026 (edited)"), encoding="utf-8")
+    sync_source(engine, RoutineConnector(edited, SYNC), SYNC)  # earlier sync stored sessions
+    assert items(engine, "routine")
+    r = sync_source(engine, RoutineConnector(p, SYNC), SYNC, now=timeutil.now() + timedelta(minutes=1))
+    assert r.status == "ok" and "still the example timetable" in r.error
+    assert items(engine, "routine") == {}  # fictional classes never reach a briefing
+    assert state(engine, "routine").last_error.startswith("warning:")
 
 
 def test_routine_expands_semester_with_skips(engine, routine_file):
@@ -147,6 +162,63 @@ def test_feed_refuses_redirect_to_http(engine):
 
 
 # ------------------------------------------------------------------ Canvas API
+
+def test_course_labels_from_real_northeastern_codes():
+    from atlas.connectors.canvas import course_label
+
+    assert course_label({"course_code": "CS5100.17342.202710", "name": "CS5100 17342 Foundations AI SEC 01"}) == "CS 5100"
+    assert course_label({"course_code": "CS5010.MERGED.202710"}) == "CS 5010"
+    assert course_label({"course_code": "EXED6000.24365.202710"}) == "EXED 6000"
+    assert course_label({"course_code": "CS 5800"}) == "CS 5800"
+    assert course_label({"course_code": "Masters.ProfDoc.Orientation",
+                         "name": "Master's and Professional Doctorate Orientation"}) == \
+        "Master's and Professional Doctorate Orientation"  # not a subject+number code: keep the readable name
+    assert course_label({"id": 7}) == "7"
+
+
+def test_course_filter_ignores_spacing_and_punctuation(engine):
+    from atlas.agent.tools import make_tools
+
+    with Session(engine) as db:
+        db.add(Item(id="canvas:assignment:1", source="canvas", source_id="assignment:1", kind="deadline",
+                    title="Lab 9: Adapter", course="CS 5010", due=datetime(2026, 11, 14, 2, tzinfo=timezone.utc)))
+        db.add(Item(id="canvas:assignment:2", source="canvas", source_id="assignment:2", kind="deadline",
+                    title="Assignment 3", course="CS 5100", due=datetime(2026, 11, 14, 4, tzinfo=timezone.utc)))
+        db.commit()
+    get_deadlines = next(t for t in make_tools(engine) if t.tool_name == "get_deadlines")
+    for asked in ("CS5010", "cs 5010", "CS-5010", "CS 5010"):
+        assert [i["title"] for i in get_deadlines(start="today", end="", course=asked)["items"]] == ["Lab 9: Adapter"]
+
+
+def test_redo_request_reopens_graded_work():
+    p = {"submissions": {"submitted": True, "graded": True, "redo_request": True}}
+    assert submission_status(p) == "redo_requested"
+    from atlas.agent.tools import DONE_STATUSES
+
+    assert "redo_requested" not in DONE_STATUSES  # so it is reported as due again
+
+
+@respx.mock
+def test_canvas_client_refuses_anything_but_get(engine):
+    from atlas.connectors.base import SourceError, make_client
+    from atlas.connectors.canvas import read_only
+
+    write = respx.post(host="canvas.example.edu").mock(return_value=httpx.Response(200))
+    with make_client(base_url=BASE, event_hooks={"request": [read_only]}) as c:
+        with pytest.raises(SourceError, match="only reads"):
+            c.post("/api/v1/courses/1/assignments/2/submissions", json={})
+    assert write.call_count == 0  # blocked before leaving the machine
+    canvas_routes()
+    seen = {}
+
+    def factory(**kwargs):  # the connector must install the guard on the client it really uses
+        seen.update(kwargs)
+        return make_client(**kwargs)
+
+    sync_source(engine, CanvasConnector(BASE, MemoryStore({"canvas.token": "t"}), SYNC, client_factory=factory), SYNC)
+    assert read_only in seen["event_hooks"]["request"]
+    assert {call.request.method for call in respx.calls} == {"GET"}
+
 
 def test_submission_status_mapping():
     assert submission_status({"submissions": {"graded": True}}) == "graded"

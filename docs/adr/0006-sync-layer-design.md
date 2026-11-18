@@ -49,6 +49,25 @@ Phase 2's goal is a reliable daily briefing. Its gate requires 7 days of briefs 
 - 36 connector and OAuth tests run on recorded-style fixtures. They cover pagination, submission states, recurrence expansion, cancellations, invites, expiry partway through a sync, a forged OAuth `state`, cross-host pagination and feed-URL redaction.
 - A mutation check broke four safety behaviours one at a time; the matching test failed for each.
 
+## Addendum, 2026-11-17: first real Canvas sync (Northeastern)
+**Verified on real data:**
+- 5 planner assignments and 3 announcements were stored.
+- A read-only cross-check against the raw API responses found 0 mismatches:
+  - every due time is identical to the second (stored in UTC, displayed in America/New_York);
+  - every status matches Canvas's `submissions` flags (1 `submitted`, 4 not submitted).
+- The briefing, built from the store, matched an independent SQL calculation of every section. Submitted work appeared nowhere.
+
+**Real responses include fields the docs didn't list:** `submitted`, `redo_request`, `has_feedback`, `posted_at`, plus top-level `context_name`, `plannable_date` and `new_activity`.
+
+**Fixes from the real data:**
+1. **Course names.** Northeastern `course_code`s look like `CS5100.17342.202710` (subject+number, CRN, term). The chat tool's course filter did a plain substring match, so asking about "CS 5100" would have found nothing.
+   - Fix: store `CS 5100` (`course_label`), falling back to the course name for codes that don't follow the pattern, such as `Masters.ProfDoc.Orientation`.
+   - The filter now ignores spacing and punctuation, so "CS5010", "cs 5010" and "CS-5010" all match.
+2. **`redo_request`.** An instructor's resubmission request made graded work look finished. It now maps to `redo_requested`, which isn't a done status, so the work appears as due again.
+3. **Read-only is enforced, not assumed.** A personal Canvas token can submit, post and delete. The Canvas client now carries a request hook that blocks any non-GET method before it leaves the machine. A test checks that a POST is blocked and that a full sync only ever sends GET.
+4. **The example timetable must never look real.** `config/routine.yaml` was an unedited copy of the example, so the sync stored 18 fictional class sessions. An unedited example is now ignored: its sessions are removed and a warning shows in the briefing. The briefing headline says "timetable not set up" instead of "0 classes", and counts deadlines due later in the week ("3 more this week").
+5. **Test isolation.** Once the developer's own `config/settings.toml` enabled Canvas, the tests started reading it. `ATLAS_SETTINGS_FILE` now overrides the path, and the test suite points it, and the routine path, at nothing.
+
 ## Consequences
 - Re-fetching a 31-day window wastes some bandwidth. That's acceptable for one user and keeps the sync logic simple.
 - **ICS mode can't show submission status.** In ICS mode the briefing must say that "due" items may already be submitted.

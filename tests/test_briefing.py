@@ -177,6 +177,29 @@ def test_toast_points_at_whats_next_not_whats_over(engine):
     assert "Morning lecture" not in body and "evil.example" not in body  # over already / someone else's text
 
 
+def test_sync_warnings_reach_the_briefing(engine):
+    from atlas.connectors.routine import EXAMPLE_WARNING
+
+    with Session(engine) as db:
+        db.add(SyncState(source="routine", status="ok", last_success_at=NOW, last_error=f"warning: {EXAMPLE_WARNING}"))
+        db.commit()
+    add(engine, id="canvas:a:1", source="canvas", kind="deadline", title="Lab 9", due=NOW + timedelta(days=3))
+    c = briefing.build(engine, Settings(), NOW)
+    assert any("still the example timetable" in x for x in c["caveats"])
+    assert "Replace it with your real lectures" in briefing.render_text(c)
+    # Real-data finding (2026-11-17): the headline said "0 classes · 0 due within 48 h" with no timetable
+    # and 3 deadlines later in the week. It must say what it doesn't know and what's coming.
+    assert c["summary"] == "timetable not set up · 0 due within 48 h · 1 more this week"
+
+
+def test_summary_counts_classes_when_timetable_is_synced(engine):
+    with Session(engine) as db:
+        db.add(SyncState(source="routine", status="ok", last_success_at=NOW))
+        db.commit()
+    add(engine, id="routine:l", source="routine", kind="lecture", title="CS 5100 Lecture", start=at(13, 13), end=at(13, 14))
+    assert briefing.build(engine, Settings(), NOW)["summary"].startswith("1 class · 0 due within 48 h")
+
+
 def test_feed_mode_caveat(engine):
     settings = Settings(sources={"canvas": {"enabled": True, "mode": "ics"}})
     assert any("can't see submissions" in x for x in briefing.build(engine, settings, NOW)["caveats"])

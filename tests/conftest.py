@@ -13,9 +13,12 @@ FROZEN_NOW = "2026-11-13T09:00:00"
 
 
 @pytest.fixture(autouse=True)
-def frozen_now(monkeypatch):
+def frozen_now(monkeypatch, tmp_path):
     monkeypatch.setenv("ATLAS_NOW", FROZEN_NOW)
     monkeypatch.setenv("ATLAS_HOME", str(ROOT))
+    # Isolation: never read the developer's real config/settings.toml or config/routine.yaml
+    monkeypatch.setenv("ATLAS_SETTINGS_FILE", str(tmp_path / "no-settings.toml"))
+    monkeypatch.setenv("ATLAS_SOURCES__ROUTINE__PATH", str(tmp_path / "no-routine.yaml"))
 
 
 @pytest.fixture

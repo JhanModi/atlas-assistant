@@ -105,7 +105,9 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        toml_path = project_root() / "config" / "settings.toml"
+        # ATLAS_SETTINGS_FILE overrides the location (the test suite points it at nothing, so tests never
+        # depend on the developer's own config/settings.toml)
+        toml_path = Path(os.environ.get("ATLAS_SETTINGS_FILE") or project_root() / "config" / "settings.toml")
         sources: list[PydanticBaseSettingsSource] = [init_settings, env_settings]
         if toml_path.exists():
             sources.append(TomlConfigSettingsSource(settings_cls, toml_file=toml_path))

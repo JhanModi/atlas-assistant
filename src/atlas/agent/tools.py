@@ -6,6 +6,7 @@ as the user said them and resolved deterministically by atlas.timeutil (via secu
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -26,6 +27,11 @@ DONE_STATUSES = {"submitted", "graded", "done", "completed", "excused"}
 
 TOOL_NAMES = ["get_agenda", "get_deadlines", "find_conflicts", "get_routine", "search_items"]
 CLASS_KINDS = ["lecture", "lab", "office_hours", "recitation"]
+
+
+def course_key(text: str | None) -> str:
+    """Spacing/punctuation-insensitive course key: "CS 5100" == "cs5100" == "CS-5100"."""
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -148,10 +154,10 @@ def make_tools(engine: Engine) -> list:
         """
         s, e = slots.deadline_range(start, end)
         stmt = select(Item).where(col(Item.kind) == "deadline", col(Item.due) >= s, col(Item.due) < e)
-        if course.strip():
-            stmt = stmt.where(col(Item.course).ilike(f"%{course.strip()}%"))
         with session() as db:
             rows = db.exec(stmt).all()
+        if course_key(course):  # "CS5100", "cs 5100" and "CS-5100" all match the stored "CS 5100"
+            rows = [r for r in rows if course_key(course) in course_key(r.course)]
         if not include_submitted:
             rows = [r for r in rows if (r.status or "").lower() not in DONE_STATUSES]
         rows.sort(key=lambda i: i.due)

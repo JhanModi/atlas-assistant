@@ -264,8 +264,11 @@ def cmd_auth(args: argparse.Namespace) -> int:
             return 2
         print(f"Canvas ({base}) -> Account -> Settings -> '+ New Access Token'. Give it a purpose and expiry date.")
         token = getpass.getpass("Paste the token (input hidden): ").strip()
+        from atlas.connectors.canvas import read_only
+
         try:
-            with make_client(base_url=base, headers={"Authorization": f"Bearer {token}"}) as c:
+            with make_client(base_url=base, headers={"Authorization": f"Bearer {token}"},
+                             event_hooks={"request": [read_only]}) as c:
                 r = c.get("/api/v1/users/self")
         except httpx.HTTPError as exc:
             print(f"Couldn't reach Canvas ({type(exc).__name__}). Nothing was saved.")

@@ -59,7 +59,7 @@ def build(engine: Engine, settings: Settings, now: datetime, alerts: list[Alert]
     health = source_health(engine, settings, now)
     with Session(engine) as db:
         demo = len(db.exec(select(Item.id).where(Item.source == "demo")).all())
-    caveats = []
+    caveats = [f"{h['source']}: {h['warning']}" for h in health if h.get("warning")]
     if settings.sources.canvas.enabled and settings.sources.canvas.mode == "ics":
         caveats.append("Canvas is in feed mode, which can't see submissions: items listed as due may already be done.")
     if demo:
@@ -85,12 +85,20 @@ def build(engine: Engine, settings: Settings, now: datetime, alerts: list[Alert]
 
 
 def summary(c: dict[str, Any]) -> str:
+    """One honest line (also the notification text): never "0 classes" when the timetable isn't known."""
     classes = sum(1 for i in c["today"] if i["kind"] in ("lecture", "lab", "recitation", "office_hours"))
     events = len(c["today"]) - classes
-    parts = [f"{classes} class{'es' if classes != 1 else ''}"]
+    routine = next((h for h in c["health"] if h["source"] == "routine"), None)
+    parts = []
+    if routine and (routine["status"] != "ok" or routine.get("warning")):
+        parts.append("timetable not set up")
+    elif routine or classes:
+        parts.append(f"{classes} class{'es' if classes != 1 else ''}")
     if events:
         parts.append(f"{events} other event{'s' if events != 1 else ''}")
     parts.append(f"{len(c['due_48h'])} due within 48 h")
+    if c["due_week"]:
+        parts.append(f"{len(c['due_week'])} more this week")
     hard = sum(1 for x in c["clashes"] if not x["optional"])
     if hard:
         parts.append(f"{hard} clash{'es' if hard != 1 else ''}")
